@@ -226,4 +226,38 @@ public class MinioUtils {
         String uuid = UUID.randomUUID().toString().replace("-", "");
         return uuid + (ext.isEmpty() ? "" : "." + ext);
     }
+
+    /**
+     * 合并分片文件
+     *
+     * @param chunkPaths 分片路径列表（按顺序）
+     * @param targetPath 目标文件路径
+     */
+    public void mergeChunks(java.util.List<String> chunkPaths, String targetPath) {
+        ensureBucketExists(minioConfig.getBucketName());
+
+        try {
+            // 构建合并源列表
+            java.util.List<ComposeSource> sources = chunkPaths.stream()
+                    .map(path -> ComposeSource.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(path)
+                            .build())
+                    .toList();
+
+            // 执行合并
+            minioClient.composeObject(
+                    ComposeObjectArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(targetPath)
+                            .sources(sources)
+                            .build());
+
+            log.info("分片合并成功: targetPath={}, chunks={}", targetPath, chunkPaths.size());
+
+        } catch (Exception e) {
+            log.error("分片合并失败: targetPath={}", targetPath, e);
+            throw new BusinessException(ResultCode.CHUNK_MERGE_FAIL, "分片合并失败");
+        }
+    }
 }

@@ -2,12 +2,16 @@ package com.wmt.smartnetdisk.controller;
 
 import com.wmt.smartnetdisk.common.result.PageResult;
 import com.wmt.smartnetdisk.common.result.Result;
+import com.wmt.smartnetdisk.dto.request.ChunkMergeDTO;
+import com.wmt.smartnetdisk.dto.request.ChunkUploadDTO;
 import com.wmt.smartnetdisk.dto.request.FastUploadDTO;
 import com.wmt.smartnetdisk.dto.request.FileListDTO;
 import com.wmt.smartnetdisk.dto.request.MoveDTO;
 import com.wmt.smartnetdisk.dto.request.RenameDTO;
 import com.wmt.smartnetdisk.service.IAuthService;
+import com.wmt.smartnetdisk.service.IFileChunkService;
 import com.wmt.smartnetdisk.service.IFileService;
+import com.wmt.smartnetdisk.vo.ChunkCheckResultVO;
 import com.wmt.smartnetdisk.vo.FileVO;
 import com.wmt.smartnetdisk.vo.UploadResultVO;
 import jakarta.validation.Valid;
@@ -33,6 +37,7 @@ import java.util.Map;
 public class FileController {
 
     private final IFileService fileService;
+    private final IFileChunkService fileChunkService;
     private final IAuthService authService;
 
     // ==================== 文件上传相关 ====================
@@ -62,6 +67,41 @@ public class FileController {
         Long userId = authService.getCurrentUserId();
         UploadResultVO result = fileService.uploadFile(userId, file, folderId);
         return Result.success("上传成功", result);
+    }
+
+    // ==================== 分片上传相关 ====================
+
+    /**
+     * 分片上传检测（秒传 + 断点续传）
+     * 前端先计算文件 MD5，调用此接口检测是否可以秒传或获取已上传分片列表
+     */
+    @PostMapping("/chunk/check")
+    public Result<ChunkCheckResultVO> checkChunks(@Valid @RequestBody FastUploadDTO fastUploadDTO) {
+        Long userId = authService.getCurrentUserId();
+        ChunkCheckResultVO result = fileChunkService.checkChunks(userId, fastUploadDTO);
+        return Result.success(result);
+    }
+
+    /**
+     * 上传单个分片
+     */
+    @PostMapping("/chunk")
+    public Result<Void> uploadChunk(
+            ChunkUploadDTO chunkUploadDTO,
+            @RequestParam("file") MultipartFile chunkFile) {
+        Long userId = authService.getCurrentUserId();
+        fileChunkService.uploadChunk(userId, chunkUploadDTO, chunkFile);
+        return Result.success("分片上传成功", null);
+    }
+
+    /**
+     * 合并分片
+     */
+    @PostMapping("/merge")
+    public Result<UploadResultVO> mergeChunks(@Valid @RequestBody ChunkMergeDTO mergeDTO) {
+        Long userId = authService.getCurrentUserId();
+        UploadResultVO result = fileChunkService.mergeChunks(userId, mergeDTO);
+        return Result.success("合并成功", result);
     }
 
     /**
