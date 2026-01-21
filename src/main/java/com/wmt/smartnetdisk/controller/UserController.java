@@ -8,6 +8,7 @@ import com.wmt.smartnetdisk.dto.request.UpdateUserDTO;
 import com.wmt.smartnetdisk.entity.User;
 import com.wmt.smartnetdisk.service.IAuthService;
 import com.wmt.smartnetdisk.service.IUserService;
+import com.wmt.smartnetdisk.utils.MinioUtils;
 import com.wmt.smartnetdisk.vo.SpaceVO;
 import com.wmt.smartnetdisk.vo.UserVO;
 import jakarta.validation.Valid;
@@ -15,6 +16,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * 用户控制器
@@ -30,6 +36,7 @@ public class UserController {
 
     private final IUserService userService;
     private final IAuthService authService;
+    private final MinioUtils minioUtils;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
