@@ -1,19 +1,17 @@
 package com.wmt.smartnetdisk.config;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
  * Redis 配置类
+ * <p>
+ * Spring Boot 4.x 版本配置
+ * </p>
  *
  * @author wmt
  * @since 1.0.0
@@ -24,7 +22,7 @@ public class RedisConfig {
     /**
      * RedisTemplate 配置
      * <p>
-     * 使用 JSON 序列化方式，解决默认 JDK 序列化可读性差的问题
+     * Key 使用 String 序列化，Value 使用 JSON 序列化
      * </p>
      */
     @Bean
@@ -32,20 +30,11 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // 配置 ObjectMapper
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        objectMapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL);
-        // 支持 Java 8 日期时间类型
-        objectMapper.registerModule(new JavaTimeModule());
-
-        // JSON 序列化器
-        Jackson2JsonRedisSerializer<Object> jsonSerializer = new Jackson2JsonRedisSerializer<>(objectMapper,
-                Object.class);
-
         // String 序列化器
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
+
+        // JSON 序列化器（Spring Boot 4.x 推荐方式）
+        RedisSerializer<Object> jsonSerializer = RedisSerializer.json();
 
         // Key 使用 String 序列化
         template.setKeySerializer(stringSerializer);
