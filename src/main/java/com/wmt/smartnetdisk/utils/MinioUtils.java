@@ -5,7 +5,6 @@ import com.wmt.smartnetdisk.common.result.ResultCode;
 import com.wmt.smartnetdisk.config.MinioConfig;
 import io.minio.*;
 import io.minio.http.Method;
-import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
