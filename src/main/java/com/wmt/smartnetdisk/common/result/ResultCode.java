@@ -69,6 +69,8 @@ public enum ResultCode {
     AI_CHAT_FAIL(4004, "智能问答失败"),
     DOCUMENT_PARSE_FAIL(4005, "文档解析失败"),
     DOCUMENT_NOT_VECTORIZED(4006, "文档尚未向量化"),
+    AI_VECTORIZE_UNSUPPORTED(4007, "文件类型不支持向量化"),
+    AI_SUMMARY_FAIL(4008, "生成摘要失败"),
 
     // ==================== 数据库错误 5xxx ====================
     DATA_NOT_FOUND(5001, "数据不存在"),
