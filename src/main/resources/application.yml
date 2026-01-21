@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: SmartNetdisk
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    username: smartnetdisk
+    password: ${DB_PASSWORD:postgres_password}
+    url: jdbc:postgresql://localhost:5432/smartnetdisk
+  data:
+    redis:
+      password: ${REDIS_PASSWORD:redis_password}
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1000ms
+      timeout: 3000ms
+#  profiles:
+#    active: dev
+server:
+  servlet:
+    context-path: /api
+  port: 8081
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# MinIO 配置
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket-name: smartnetdisk
+
+# 硅基流动 AI 配置
+ai:
+  siliconflow:
+    api-key: ${SILICONFLOW_API_KEY:}
+    base-url: https://api.siliconflow.cn/v1
+    model: Qwen/Qwen2.5-7B-Instruct
+    embedding-model: BAAI/bge-large-zh-v1.5
