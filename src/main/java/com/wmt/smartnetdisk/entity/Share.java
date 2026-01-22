@@ -32,9 +32,34 @@ public class Share implements Serializable {
     private Long userId;
 
     /**
-     * 被分享的文件ID
+     * 被分享的文件ID（单文件分享时使用）
      */
     private Long fileId;
+
+    /**
+     * 分享类型: 0-单文件分享, 1-目录分享, 2-批量分享
+     */
+    private Integer shareType;
+
+    /**
+     * 被分享的文件夹ID（目录分享时使用）
+     */
+    private Long folderId;
+
+    /**
+     * 分享标题（批量分享时的自定义标题）
+     */
+    private String shareTitle;
+
+    /**
+     * 分享总大小（字节）
+     */
+    private Long totalSize;
+
+    /**
+     * 包含的文件数量
+     */
+    private Integer fileCount;
 
     /**
      * 分享短码（唯一）
