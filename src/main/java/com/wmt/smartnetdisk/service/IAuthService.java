@@ -53,4 +53,14 @@ public interface IAuthService {
      * @return 是否已登录
      */
     boolean isLogin();
+
+    /**
+     * 刷新 Token
+     * <p>
+     * 续期当前登录的 Token 有效期，返回新的 Token 信息
+     * </p>
+     *
+     * @return 刷新后的登录信息
+     */
+    LoginVO refreshToken();
 }

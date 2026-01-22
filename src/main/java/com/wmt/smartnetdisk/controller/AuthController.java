@@ -78,4 +78,18 @@ public class AuthController {
     public Result<Boolean> checkLogin() {
         return Result.success(authService.isLogin());
     }
+
+    /**
+     * 刷新 Token
+     * <p>
+     * 续期当前 Token 的有效期，返回更新后的 Token 信息
+     * </p>
+     *
+     * @return 刷新后的登录信息
+     */
+    @PostMapping("/refresh")
+    public Result<LoginVO> refreshToken() {
+        LoginVO loginVO = authService.refreshToken();
+        return Result.success("Token 刷新成功", loginVO);
+    }
 }

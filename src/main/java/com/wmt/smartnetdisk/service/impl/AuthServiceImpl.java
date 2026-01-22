@@ -145,4 +145,47 @@ public class AuthServiceImpl implements IAuthService {
     public boolean isLogin() {
         return StpUtil.isLogin();
     }
+
+    @Override
+    public LoginVO refreshToken() {
+        // 检查是否登录
+        if (!StpUtil.isLogin()) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "请先登录");
+        }
+
+        Long userId = StpUtil.getLoginIdAsLong();
+        User user = userService.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        // 检查账号状态
+        if (user.getStatus() != 1) {
+            // 账号被禁用，强制退出
+            StpUtil.logout();
+            throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
+        }
+
+        // 获取当前 Token 的剩余有效期（秒）
+        long tokenTimeout = StpUtil.getTokenTimeout();
+
+        // 默认刷新后的有效期：7天（可根据业务调整）
+        long newTimeout = 7 * 24 * 60 * 60L;
+
+        // 如果当前 Token 剩余时间超过一半，则不刷新，避免频繁刷新
+        if (tokenTimeout > newTimeout / 2) {
+            log.debug("Token 剩余有效期充足，无需刷新: userId={}, remaining={}s", userId, tokenTimeout);
+        } else {
+            // 刷新 Token 有效期
+            StpUtil.renewTimeout(newTimeout);
+            log.info("Token 刷新成功: userId={}, newTimeout={}s", userId, newTimeout);
+        }
+
+        // 构建响应
+        String token = StpUtil.getTokenValue();
+        String tokenName = StpUtil.getTokenName();
+        UserVO userVO = userService.toVO(user);
+
+        return LoginVO.of(token, tokenName, userVO);
+    }
 }
