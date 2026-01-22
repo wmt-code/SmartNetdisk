@@ -4,6 +4,7 @@ import com.wmt.smartnetdisk.common.result.PageResult;
 import com.wmt.smartnetdisk.common.result.Result;
 import com.wmt.smartnetdisk.dto.request.ChunkMergeDTO;
 import com.wmt.smartnetdisk.dto.request.ChunkUploadDTO;
+import com.wmt.smartnetdisk.dto.request.CopyDTO;
 import com.wmt.smartnetdisk.dto.request.FastUploadDTO;
 import com.wmt.smartnetdisk.dto.request.FileListDTO;
 import com.wmt.smartnetdisk.dto.request.MoveDTO;
@@ -173,6 +174,16 @@ public class FileController {
     }
 
     /**
+     * 复制文件
+     */
+    @PostMapping("/{id}/copy")
+    public Result<FileVO> copyFile(@PathVariable("id") Long fileId, @Valid @RequestBody CopyDTO copyDTO) {
+        Long userId = authService.getCurrentUserId();
+        FileVO newFile = fileService.copyFile(userId, fileId, copyDTO.getTargetFolderId());
+        return Result.success("复制成功", newFile);
+    }
+
+    /**
      * 删除文件（移入回收站）
      */
     @DeleteMapping("/{id}")
@@ -230,5 +241,15 @@ public class FileController {
         Long userId = authService.getCurrentUserId();
         fileService.batchMoveFiles(userId, moveDTO.getFileIds(), moveDTO.getTargetFolderId());
         return Result.success("批量移动成功", null);
+    }
+
+    /**
+     * 批量复制
+     */
+    @PostMapping("/batch/copy")
+    public Result<List<FileVO>> batchCopyFiles(@Valid @RequestBody CopyDTO copyDTO) {
+        Long userId = authService.getCurrentUserId();
+        List<FileVO> newFiles = fileService.batchCopyFiles(userId, copyDTO.getFileIds(), copyDTO.getTargetFolderId());
+        return Result.success("批量复制成功", newFiles);
     }
 }

@@ -125,6 +125,110 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public FileVO copyFile(Long userId, Long fileId, Long targetFolderId) {
+        // 获取原文件信息
+        FileInfo sourceFile = getById(fileId);
+        if (sourceFile == null || !sourceFile.getUserId().equals(userId) || sourceFile.getDeleted() == 1) {
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND);
+        }
+
+        // 检查用户空间是否足够
+        User user = userService.getById(userId);
+        if (user.getUsedSpace() + sourceFile.getFileSize() > user.getTotalSpace()) {
+            throw new BusinessException(ResultCode.FILE_SIZE_EXCEED, "存储空间不足");
+        }
+
+        // 生成新文件名（如果目标文件夹有同名文件则添加副本后缀）
+        String newFileName = generateCopyFileName(userId, targetFolderId, sourceFile.getFileName());
+
+        // 创建文件副本记录（共享同一存储路径，不复制实际文件）
+        FileInfo newFile = new FileInfo();
+        newFile.setUserId(userId);
+        newFile.setFolderId(targetFolderId);
+        newFile.setFileName(newFileName);
+        newFile.setFileMd5(sourceFile.getFileMd5());
+        newFile.setFileSize(sourceFile.getFileSize());
+        newFile.setFileType(sourceFile.getFileType());
+        newFile.setFileExt(sourceFile.getFileExt());
+        newFile.setMimeType(sourceFile.getMimeType());
+        newFile.setStoragePath(sourceFile.getStoragePath()); // 共享存储路径
+        newFile.setThumbnailPath(sourceFile.getThumbnailPath());
+        newFile.setIsVectorized(0); // 副本不继承向量化状态
+        newFile.setStatus(1);
+        save(newFile);
+
+        // 更新用户已用空间（副本也占用空间配额）
+        userService.updateUsedSpace(userId, sourceFile.getFileSize());
+
+        log.info("文件复制成功: userId={}, sourceFileId={}, newFileId={}, targetFolderId={}",
+                userId, fileId, newFile.getId(), targetFolderId);
+        return toVO(newFile);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<FileVO> batchCopyFiles(Long userId, List<Long> fileIds, Long targetFolderId) {
+        return fileIds.stream()
+                .map(fileId -> copyFile(userId, fileId, targetFolderId))
+                .toList();
+    }
+
+    /**
+     * 生成复制文件名
+     * <p>
+     * 如果目标文件夹已存在同名文件，则添加 "副本"、"副本(2)" 等后缀
+     * </p>
+     */
+    private String generateCopyFileName(Long userId, Long folderId, String originalFileName) {
+        // 检查目标文件夹是否有同名文件
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId)
+                .eq(FileInfo::getFolderId, folderId)
+                .eq(FileInfo::getDeleted, 0)
+                .eq(FileInfo::getFileName, originalFileName);
+
+        if (count(wrapper) == 0) {
+            return originalFileName;
+        }
+
+        // 分离文件名和扩展名
+        String baseName;
+        String extension = "";
+        int dotIndex = originalFileName.lastIndexOf(".");
+        if (dotIndex > 0) {
+            baseName = originalFileName.substring(0, dotIndex);
+            extension = originalFileName.substring(dotIndex);
+        } else {
+            baseName = originalFileName;
+        }
+
+        // 尝试生成不重复的文件名
+        String newFileName = baseName + " - 副本" + extension;
+        int copyIndex = 2;
+
+        while (true) {
+            LambdaQueryWrapper<FileInfo> checkWrapper = new LambdaQueryWrapper<>();
+            checkWrapper.eq(FileInfo::getUserId, userId)
+                    .eq(FileInfo::getFolderId, folderId)
+                    .eq(FileInfo::getDeleted, 0)
+                    .eq(FileInfo::getFileName, newFileName);
+
+            if (count(checkWrapper) == 0) {
+                return newFileName;
+            }
+
+            newFileName = baseName + " - 副本(" + copyIndex + ")" + extension;
+            copyIndex++;
+
+            // 防止无限循环
+            if (copyIndex > 100) {
+                throw new BusinessException(ResultCode.DATA_ALREADY_EXIST, "文件名重复过多，请手动重命名");
+            }
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteFile(Long userId, Long fileId) {
         FileInfo fileInfo = getById(fileId);
         if (fileInfo == null || !fileInfo.getUserId().equals(userId)) {

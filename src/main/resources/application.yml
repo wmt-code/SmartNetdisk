@@ -3,12 +3,12 @@ spring:
     name: SmartNetdisk
   datasource:
     driver-class-name: org.postgresql.Driver
-    username: smartnetdisk
-    password: ${DB_PASSWORD:postgres_password}
+    username: postgres
+    password: ${DB_PASSWORD:Pgsql@2314}
     url: jdbc:postgresql://82.158.225.68:5432/smartnetdisk
   data:
     redis:
-      password: ${REDIS_PASSWORD:redis_password}
+      password: ${REDIS_PASSWORD:redis_rbKhnX}
       host: ${REDIS_HOST:82.158.225.68}
       port: 6379
       database: 0
@@ -47,7 +47,7 @@ minio:
 # 硅基流动 AI 配置
 ai:
   siliconflow:
-    api-key: ${SILICONFLOW_API_KEY:}
+    api-key: ${SILICONFLOW_API_KEY:sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm}
     base-url: https://api.siliconflow.cn/v1
     model: Qwen/Qwen2.5-7B-Instruct
     embedding-model: BAAI/bge-large-zh-v1.5

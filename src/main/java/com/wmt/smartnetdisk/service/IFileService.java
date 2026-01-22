@@ -73,6 +73,29 @@ public interface IFileService extends IService<FileInfo> {
     void batchMoveFiles(Long userId, List<Long> fileIds, Long targetFolderId);
 
     /**
+     * 复制文件
+     * <p>
+     * 在目标文件夹创建文件副本，不复制实际存储文件（共享同一存储路径）
+     * </p>
+     *
+     * @param userId         用户ID
+     * @param fileId         文件ID
+     * @param targetFolderId 目标文件夹ID
+     * @return 新文件的视图对象
+     */
+    FileVO copyFile(Long userId, Long fileId, Long targetFolderId);
+
+    /**
+     * 批量复制文件
+     *
+     * @param userId         用户ID
+     * @param fileIds        文件ID列表
+     * @param targetFolderId 目标文件夹ID
+     * @return 新文件的视图对象列表
+     */
+    List<FileVO> batchCopyFiles(Long userId, List<Long> fileIds, Long targetFolderId);
+
+    /**
      * 删除文件（移入回收站）
      *
      * @param userId 用户ID
