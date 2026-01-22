@@ -22,8 +22,8 @@ spring:
 #  profiles:
 #    active: dev
 server:
-  servlet:
-    context-path: /api
+#  servlet:
+#    context-path: /api
   port: 8081
 
 mybatis-plus:
@@ -40,8 +40,8 @@ mybatis-plus:
 # MinIO 配置
 minio:
   endpoint: ${MINIO_ENDPOINT:http://82.158.225.68:9000}
-  access-key: ${MINIO_ACCESS_KEY:minioadmin}
-  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  access-key: ${MINIO_ACCESS_KEY:minio_nCHiZS}
+  secret-key: ${MINIO_SECRET_KEY:minio_ZPZEzf}
   bucket-name: smartnetdisk
 
 # 硅基流动 AI 配置
