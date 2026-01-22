@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -81,6 +82,67 @@ public class UserController {
         userService.updateById(user);
         log.info("用户信息更新成功: userId={}", userId);
         return Result.success("更新成功", userService.toVO(user));
+    }
+
+    /**
+     * 上传头像
+     *
+     * @param file 头像文件
+     * @return 头像URL
+     */
+    @PostMapping("/avatar")
+    public Result<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        // 校验文件是否为空
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ResultCode.PARAM_VALID_ERROR, "请选择要上传的头像");
+        }
+
+        // 校验文件大小（最大2MB）
+        long maxAvatarSize = 2 * 1024 * 1024L;
+        if (file.getSize() > maxAvatarSize) {
+            throw new BusinessException(ResultCode.FILE_SIZE_EXCEED, "头像大小不能超过2MB");
+        }
+
+        // 校验文件类型
+        String originalFilename = file.getOriginalFilename();
+        String ext = originalFilename != null && originalFilename.contains(".")
+                ? originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase()
+                : "";
+        Set<String> allowedExtensions = Set.of("jpg", "jpeg", "png", "gif", "webp");
+        if (!allowedExtensions.contains(ext)) {
+            throw new BusinessException(ResultCode.FILE_TYPE_NOT_ALLOWED, "头像仅支持 jpg、jpeg、png、gif、webp 格式");
+        }
+
+        Long userId = authService.getCurrentUserId();
+        User user = userService.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        // 保存旧头像路径，用于后续删除
+        String oldAvatarPath = user.getAvatar();
+
+        // 上传新头像
+        String avatarPath = minioUtils.uploadAvatar(file, userId);
+
+        // 生成头像访问URL（有效期7天）
+        String avatarUrl = minioUtils.getAvatarPresignedUrl(avatarPath, 7 * 24 * 60 * 60);
+
+        // 更新用户头像路径
+        user.setAvatar(avatarPath);
+        userService.updateById(user);
+
+        // 删除旧头像（异步删除，不影响响应）
+        if (oldAvatarPath != null && !oldAvatarPath.isBlank()) {
+            minioUtils.deleteAvatar(oldAvatarPath);
+        }
+
+        log.info("用户头像上传成功: userId={}, path={}", userId, avatarPath);
+
+        Map<String, String> data = new HashMap<>();
+        data.put("avatarPath", avatarPath);
+        data.put("avatarUrl", avatarUrl);
+        return Result.success("头像上传成功", data);
     }
 
     /**

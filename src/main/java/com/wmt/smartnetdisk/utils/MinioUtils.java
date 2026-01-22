@@ -228,6 +228,84 @@ public class MinioUtils {
     }
 
     /**
+     * 上传头像
+     *
+     * @param file   头像文件
+     * @param userId 用户ID
+     * @return 头像存储路径
+     */
+    public String uploadAvatar(MultipartFile file, Long userId) {
+        String avatarBucket = "avatars";
+        ensureBucketExists(avatarBucket);
+
+        String originalFilename = file.getOriginalFilename();
+        String ext = getFileExtension(originalFilename);
+        // 生成头像存储路径: avatars/{userId}/{uuid}.{ext}
+        String storagePath = String.format("%d/%s.%s", userId, UUID.randomUUID().toString().replace("-", ""), ext);
+
+        try (InputStream inputStream = file.getInputStream()) {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(avatarBucket)
+                            .object(storagePath)
+                            .stream(inputStream, file.getSize(), -1)
+                            .contentType(file.getContentType())
+                            .build());
+            log.info("头像上传成功: userId={}, path={}", userId, storagePath);
+            return storagePath;
+        } catch (Exception e) {
+            log.error("头像上传失败: userId={}", userId, e);
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAIL, "头像上传失败");
+        }
+    }
+
+    /**
+     * 获取头像预签名 URL
+     *
+     * @param storagePath 存储路径
+     * @param expiry      有效期（秒）
+     * @return 预签名 URL
+     */
+    public String getAvatarPresignedUrl(String storagePath, int expiry) {
+        String avatarBucket = "avatars";
+        try {
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .bucket(avatarBucket)
+                            .object(storagePath)
+                            .method(Method.GET)
+                            .expiry(expiry, TimeUnit.SECONDS)
+                            .build());
+        } catch (Exception e) {
+            log.error("获取头像URL失败: {}", storagePath, e);
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND, "获取头像链接失败");
+        }
+    }
+
+    /**
+     * 删除旧头像
+     *
+     * @param storagePath 存储路径
+     */
+    public void deleteAvatar(String storagePath) {
+        if (storagePath == null || storagePath.isBlank()) {
+            return;
+        }
+        String avatarBucket = "avatars";
+        try {
+            minioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(avatarBucket)
+                            .object(storagePath)
+                            .build());
+            log.info("旧头像删除成功: {}", storagePath);
+        } catch (Exception e) {
+            log.warn("旧头像删除失败(可忽略): {}", storagePath, e);
+            // 删除失败不抛异常，避免影响上传流程
+        }
+    }
+
+    /**
      * 合并分片文件
      *
      * @param chunkPaths 分片路径列表（按顺序）
