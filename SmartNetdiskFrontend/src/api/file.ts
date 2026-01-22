@@ -120,6 +120,17 @@ export async function getDownloadUrl(fileId: number): Promise<string> {
 }
 
 /**
+ * 流式下载文件（通过后端代理，确保文件名正确）
+ * 直接打开带 token 的下载链接，让浏览器原生处理
+ */
+export function downloadFileStream(fileId: number): void {
+    const token = localStorage.getItem('satoken') || ''
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
+    // 直接打开下载链接，浏览器会根据 Content-Disposition 头处理文件名
+    window.location.href = `${baseUrl}/file/${fileId}/download/stream?satoken=${token}`
+}
+
+/**
  * 获取文件预览链接
  */
 export async function getPreviewUrl(fileId: number): Promise<string> {

@@ -15,12 +15,21 @@ import com.wmt.smartnetdisk.service.IFileService;
 import com.wmt.smartnetdisk.vo.ChunkCheckResultVO;
 import com.wmt.smartnetdisk.vo.FileVO;
 import com.wmt.smartnetdisk.vo.UploadResultVO;
+import com.wmt.smartnetdisk.entity.FileInfo;
+import com.wmt.smartnetdisk.utils.MinioUtils;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +49,7 @@ public class FileController {
     private final IFileService fileService;
     private final IFileChunkService fileChunkService;
     private final IAuthService authService;
+    private final MinioUtils minioUtils;
 
     // ==================== 文件上传相关 ====================
 
@@ -116,6 +126,42 @@ public class FileController {
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);
+    }
+
+    /**
+     * 直接下载文件（流式传输）
+     * 通过后端流式传输文件，确保文件名正确
+     */
+    @GetMapping("/{id}/download/stream")
+    public void downloadFileStream(@PathVariable("id") Long fileId, HttpServletResponse response) {
+        Long userId = authService.getCurrentUserId();
+        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+
+        try (InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath());
+             OutputStream outputStream = response.getOutputStream()) {
+
+            // 设置响应头
+            String fileName = fileInfo.getFileName();
+            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+
+            response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"" + encodedFileName + "\"; filename*=UTF-8''" + encodedFileName);
+            response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileInfo.getFileSize()));
+
+            // 流式传输
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            outputStream.flush();
+
+            log.info("文件下载成功: userId={}, fileId={}, fileName={}", userId, fileId, fileName);
+        } catch (Exception e) {
+            log.error("文件下载失败: fileId={}", fileId, e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**

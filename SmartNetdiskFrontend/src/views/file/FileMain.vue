@@ -216,10 +216,10 @@ import {
 } from '@element-plus/icons-vue'
 import ShareDialog from '@/components/ShareDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  getFileList, uploadFile, deleteFile, renameFile, getDownloadUrl,
+import {
+  getFileList, uploadFile, deleteFile, renameFile, downloadFileStream,
   createFolder, restoreFile, permanentDeleteFile, getRecycleList,
-  type FileInfo 
+  type FileInfo
 } from '@/api/file'
 import { useUserStore } from '@/stores/user'
 
@@ -451,13 +451,9 @@ const handleCreateFolder = async () => {
   }
 }
 
-const handleDownload = async (row: FileInfo) => {
-  try {
-    const url = await getDownloadUrl(row.id)
-    window.open(url, '_blank')
-  } catch (error) {
-    console.error('获取下载链接失败:', error)
-  }
+const handleDownload = (row: FileInfo) => {
+  // 直接调用下载，浏览器会根据响应头处理文件名
+  downloadFileStream(row.id)
 }
 
 const handlePreview = async (row: FileInfo) => {

@@ -165,7 +165,23 @@ public class MinioUtils {
             // 使用 RFC 5987 编码处理文件名（支持中文）
             String encodedFileName = java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8)
                     .replace("+", "%20");
-            String contentDisposition = "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''"
+
+            // 为 ASCII 不兼容的浏览器提供安全的 ASCII 备用文件名
+            // 替换非 ASCII 字符为下划线，保留扩展名
+            String asciiFileName = fileName.replaceAll("[^\\x00-\\x7F]", "_");
+            if (asciiFileName.isEmpty() || asciiFileName.equals("_")) {
+                // 如果文件名全是非 ASCII，使用默认名称
+                int dotIndex = fileName.lastIndexOf('.');
+                if (dotIndex > 0) {
+                    asciiFileName = "download" + fileName.substring(dotIndex);
+                } else {
+                    asciiFileName = "download";
+                }
+            }
+
+            // Content-Disposition: attachment; filename="ascii_name";
+            // filename*=UTF-8''encoded_name
+            String contentDisposition = "attachment; filename=\"" + asciiFileName + "\"; filename*=UTF-8''"
                     + encodedFileName;
 
             java.util.Map<String, String> extraQueryParams = new java.util.HashMap<>();

@@ -72,3 +72,5 @@ sa-token:
   token-style: uuid
   # 是否输出操作日志
   is-log: false
+  # 是否从请求体读取 token（支持 URL 参数传递 token）
+  is-read-body: true
