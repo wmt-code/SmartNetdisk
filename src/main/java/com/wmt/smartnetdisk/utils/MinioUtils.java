@@ -1,21 +1,34 @@
 package com.wmt.smartnetdisk.utils;
 
-import com.wmt.smartnetdisk.common.exception.BusinessException;
-import com.wmt.smartnetdisk.common.result.ResultCode;
-import com.wmt.smartnetdisk.config.MinioConfig;
-import io.minio.*;
-import io.minio.http.Method;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-import org.springframework.web.multipart.MultipartFile;
-
 import java.io.InputStream;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.wmt.smartnetdisk.common.exception.BusinessException;
+import com.wmt.smartnetdisk.common.result.ResultCode;
+import com.wmt.smartnetdisk.config.MinioConfig;
+
+import io.minio.BucketExistsArgs;
+import io.minio.ComposeObjectArgs;
+import io.minio.ComposeSource;
+import io.minio.CopyObjectArgs;
+import io.minio.CopySource;
+import io.minio.GetObjectArgs;
+import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
+import io.minio.http.Method;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * MinIO 工具类
@@ -96,10 +109,11 @@ public class MinioUtils {
         String ext = getFileExtension(originalFilename);
 
         try (InputStream rawStream = file.getInputStream();
-             DigestInputStream digestStream = new DigestInputStream(rawStream)) {
+                DigestInputStream digestStream = new DigestInputStream(rawStream)) {
 
             // 先用临时路径名上传，上传完成后获取MD5再移动
-            String tempPath = String.format("temp/%d/%s.%s", userId, UUID.randomUUID().toString().replace("-", ""), ext);
+            String tempPath = String.format("temp/%d/%s.%s", userId, UUID.randomUUID().toString().replace("-", ""),
+                    ext);
 
             minioClient.putObject(
                     PutObjectArgs.builder()
@@ -132,7 +146,7 @@ public class MinioUtils {
                             .build());
 
             log.info("文件上传成功(带MD5): path={}, md5={}", finalPath, fileMd5);
-            return new String[]{finalPath, fileMd5};
+            return new String[] { finalPath, fileMd5 };
 
         } catch (NoSuchAlgorithmException e) {
             log.error("MD5算法不可用", e);
@@ -280,7 +294,12 @@ public class MinioUtils {
             java.util.Map<String, String> extraQueryParams = new java.util.HashMap<>();
             extraQueryParams.put("response-content-disposition", "inline");
             if (mimeType != null && !mimeType.isBlank()) {
-                extraQueryParams.put("response-content-type", mimeType);
+                // 为文本类型添加 UTF-8 编码，解决中文乱码问题
+                String contentType = mimeType;
+                if (mimeType.startsWith("text/") && !mimeType.contains("charset")) {
+                    contentType = mimeType + "; charset=utf-8";
+                }
+                extraQueryParams.put("response-content-type", contentType);
             }
 
             return minioClient.getPresignedObjectUrl(
