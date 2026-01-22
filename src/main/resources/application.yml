@@ -21,13 +21,17 @@ spring:
       timeout: 3000ms
   servlet:
     multipart:
-      max-file-size: 1TB
+      max-file-size: 10GB
+      max-request-size: 10GB
 #  profiles:
 #    active: dev
 server:
 #  servlet:
 #    context-path: /api
   port: 8081
+  tomcat:
+    max-http-form-post-size: 10GB
+    max-swallow-size: 10GB
 
 mybatis-plus:
   configuration:
@@ -43,7 +47,7 @@ mybatis-plus:
 
 # MinIO 配置
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://82.158.225.68:9000}
+  endpoint: ${MINIO_ENDPOINT:https://minio.abcsummer.site}
   access-key: ${MINIO_ACCESS_KEY:minio_nCHiZS}
   secret-key: ${MINIO_SECRET_KEY:minio_ZPZEzf}
   bucket-name: smartnetdisk

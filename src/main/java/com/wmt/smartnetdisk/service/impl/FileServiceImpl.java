@@ -68,7 +68,7 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
                 totalFolders = folders.size();
                 // 将文件夹转换为 FileVO 格式
                 for (FolderVO folder : folders) {
-                    resultList.add(folderToFileVO(folder));
+                    resultList.add(folderToFileVO(folder, userId));
                 }
             }
         }
@@ -114,12 +114,14 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     /**
      * 将 FolderVO 转换为 FileVO（用于统一列表显示）
      */
-    private FileVO folderToFileVO(FolderVO folder) {
+    private FileVO folderToFileVO(FolderVO folder, Long userId) {
         FileVO vo = new FileVO();
         vo.setId(folder.getId());
         vo.setFileName(folder.getFolderName());
-        vo.setFileSize(0L);
-        vo.setFileSizeStr("-");
+        // 计算文件夹大小
+        Long folderSize = calculateFolderSize(userId, folder.getId());
+        vo.setFileSize(folderSize);
+        vo.setFileSizeStr(SpaceVO.formatSize(folderSize));
         vo.setFileType("folder");
         vo.setFileExt("");
         vo.setThumbnailPath(null);
@@ -128,6 +130,23 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         vo.setCreateTime(folder.getCreateTime());
         vo.setUpdateTime(folder.getCreateTime()); // FolderVO 没有 updateTime，使用 createTime
         return vo;
+    }
+
+    @Override
+    public Long calculateFolderSize(Long userId, Long folderId) {
+        // 1. 计算当前文件夹下直接文件的大小
+        Long directFileSize = baseMapper.sumFileSizeByFolderId(userId, folderId);
+
+        // 2. 递归计算子文件夹的大小
+        Long subFolderSize = 0L;
+        if (folderService != null) {
+            List<FolderVO> subFolders = folderService.getChildren(userId, folderId);
+            for (FolderVO subFolder : subFolders) {
+                subFolderSize += calculateFolderSize(userId, subFolder.getId());
+            }
+        }
+
+        return directFileSize + subFolderSize;
     }
 
     @Override
@@ -437,25 +456,26 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     @Override
     @Transactional(rollbackFor = Exception.class)
     public UploadResultVO uploadFile(Long userId, MultipartFile file, Long folderId) {
+        long startTime = System.currentTimeMillis();
+        String originalFilename = file.getOriginalFilename();
+
         // 检查用户空间是否足够
         User user = userService.getById(userId);
         if (user.getUsedSpace() + file.getSize() > user.getTotalSpace()) {
             throw new BusinessException(ResultCode.FILE_SIZE_EXCEED, "存储空间不足");
         }
 
-        // 计算文件 MD5
-        String fileMd5 = Md5Utils.calculateMd5(file);
-        if (fileMd5 == null) {
-            throw new BusinessException(ResultCode.FILE_UPLOAD_FAIL, "文件校验失败");
-        }
-
         // 获取文件信息
-        String originalFilename = file.getOriginalFilename();
         String fileExt = minioUtils.getFileExtension(originalFilename);
         String fileType = FileTypeEnum.getByExtension(fileExt).getCode();
 
-        // 上传到 MinIO
-        String storagePath = minioUtils.uploadFile(file, userId, fileMd5);
+        // 一次读取完成 MD5 计算和 MinIO 上传（优化：避免读取文件两次）
+        log.info("开始上传文件(优化模式): fileName={}, size={}", originalFilename, file.getSize());
+        String[] uploadResult = minioUtils.uploadFileWithMd5(file, userId);
+        String storagePath = uploadResult[0];
+        String fileMd5 = uploadResult[1];
+        long uploadEndTime = System.currentTimeMillis();
+        log.info("文件上传和MD5计算完成: fileName={}, md5={}, 耗时={}ms", originalFilename, fileMd5, uploadEndTime - startTime);
 
         // 保存文件记录
         FileInfo newFile = new FileInfo();
@@ -474,13 +494,15 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         // 更新用户已用空间
         userService.updateUsedSpace(userId, file.getSize());
 
-        log.info("文件上传成功: userId={}, fileName={}, size={}", userId, originalFilename, file.getSize());
+        long endTime = System.currentTimeMillis();
+        log.info("文件上传成功: userId={}, fileName={}, size={}, 总耗时={}ms", userId, originalFilename, file.getSize(), endTime - startTime);
 
         // 如果文件类型支持向量化，异步触发向量化
         if (aiService.isFileVectorizable(fileExt)) {
             aiService.vectorizeDocumentAsync(userId, newFile.getId());
             log.info("已触发异步向量化: fileId={}, fileExt={}", newFile.getId(), fileExt);
         }
+
 
         return UploadResultVO.normalUpload(newFile.getId(), originalFilename, file.getSize(), fileMd5);
     }

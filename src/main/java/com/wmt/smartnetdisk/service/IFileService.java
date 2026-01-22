@@ -144,6 +144,15 @@ public interface IFileService extends IService<FileInfo> {
      */
     FileVO toVO(FileInfo fileInfo);
 
+    /**
+     * 计算文件夹大小（递归计算所有子文件和子文件夹中的文件总大小）
+     *
+     * @param userId   用户ID
+     * @param folderId 文件夹ID
+     * @return 文件夹总大小（字节）
+     */
+    Long calculateFolderSize(Long userId, Long folderId);
+
     // ==================== 文件上传相关 ====================
 
     /**

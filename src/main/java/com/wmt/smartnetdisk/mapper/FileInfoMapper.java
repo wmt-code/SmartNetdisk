@@ -32,4 +32,14 @@ public interface FileInfoMapper extends BaseMapper<FileInfo> {
      */
     @Select("SELECT COUNT(*) FROM file_info WHERE user_id = #{userId} AND deleted = 0")
     Long countByUserId(@Param("userId") Long userId);
+
+    /**
+     * 计算指定文件夹下所有文件的总大小
+     *
+     * @param userId   用户ID
+     * @param folderId 文件夹ID
+     * @return 文件总大小（字节）
+     */
+    @Select("SELECT COALESCE(SUM(file_size), 0) FROM file_info WHERE user_id = #{userId} AND folder_id = #{folderId} AND deleted = 0")
+    Long sumFileSizeByFolderId(@Param("userId") Long userId, @Param("folderId") Long folderId);
 }

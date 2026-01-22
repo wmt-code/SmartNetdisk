@@ -88,7 +88,7 @@
         </el-table-column>
         <el-table-column prop="fileSizeStr" label="大小" width="120">
           <template #default="{ row }">
-            {{ row.fileType === 'folder' ? '-' : row.fileSizeStr }}
+            {{ row.fileSizeStr }}
           </template>
         </el-table-column>
         <el-table-column prop="updateTime" label="修改时间" width="180">
@@ -141,7 +141,7 @@
             <component :is="getFileIcon(file.fileType)" />
           </el-icon>
           <span class="mt-2 text-sm text-center truncate w-full">{{ file.fileName }}</span>
-          <span class="text-xs text-gray-400 mt-1">{{ file.fileType === 'folder' ? '' : file.fileSizeStr }}</span>
+          <span class="text-xs text-gray-400 mt-1">{{ file.fileSizeStr }}</span>
         </div>
       </div>
 

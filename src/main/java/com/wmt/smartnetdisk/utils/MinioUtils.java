@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -75,6 +76,67 @@ public class MinioUtils {
                             .build());
             log.info("文件上传成功: {}", storagePath);
             return storagePath;
+        } catch (Exception e) {
+            log.error("文件上传失败: {}", originalFilename, e);
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAIL);
+        }
+    }
+
+    /**
+     * 上传文件并同时计算 MD5（一次读取完成两个操作，提升大文件上传速度）
+     *
+     * @param file   文件
+     * @param userId 用户ID
+     * @return 上传结果数组：[0] = 存储路径, [1] = MD5值
+     */
+    public String[] uploadFileWithMd5(MultipartFile file, Long userId) {
+        ensureBucketExists(minioConfig.getBucketName());
+
+        String originalFilename = file.getOriginalFilename();
+        String ext = getFileExtension(originalFilename);
+
+        try (InputStream rawStream = file.getInputStream();
+             DigestInputStream digestStream = new DigestInputStream(rawStream)) {
+
+            // 先用临时路径名上传，上传完成后获取MD5再移动
+            String tempPath = String.format("temp/%d/%s.%s", userId, UUID.randomUUID().toString().replace("-", ""), ext);
+
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(tempPath)
+                            .stream(digestStream, file.getSize(), -1)
+                            .contentType(file.getContentType())
+                            .build());
+
+            // 上传完成后获取 MD5
+            String fileMd5 = digestStream.getMd5();
+            String finalPath = generateStoragePath(userId, fileMd5, ext);
+
+            // 将临时文件复制到最终路径
+            minioClient.copyObject(
+                    CopyObjectArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(finalPath)
+                            .source(CopySource.builder()
+                                    .bucket(minioConfig.getBucketName())
+                                    .object(tempPath)
+                                    .build())
+                            .build());
+
+            // 删除临时文件
+            minioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(tempPath)
+                            .build());
+
+            log.info("文件上传成功(带MD5): path={}, md5={}", finalPath, fileMd5);
+            return new String[]{finalPath, fileMd5};
+
+        } catch (NoSuchAlgorithmException e) {
+            log.error("MD5算法不可用", e);
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAIL, "文件校验失败");
         } catch (Exception e) {
             log.error("文件上传失败: {}", originalFilename, e);
             throw new BusinessException(ResultCode.FILE_UPLOAD_FAIL);

@@ -88,6 +88,7 @@ export async function uploadFile(
         headers: {
             'Content-Type': 'multipart/form-data'
         },
+        timeout: 0, // 禁用超时，大文件上传需要较长时间
         onUploadProgress: (progressEvent) => {
             if (onProgress && progressEvent.total) {
                 const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
