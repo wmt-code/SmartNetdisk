@@ -44,6 +44,11 @@ public class ShareVO implements Serializable {
     private String fileSizeStr;
 
     /**
+     * 文件类型（扩展名）
+     */
+    private String fileType;
+
+    /**
      * 分享码
      */
     private String shareCode;

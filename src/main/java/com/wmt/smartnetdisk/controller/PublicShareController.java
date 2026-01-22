@@ -1,14 +1,22 @@
 package com.wmt.smartnetdisk.controller;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.wmt.smartnetdisk.common.result.Result;
 import com.wmt.smartnetdisk.service.IShareService;
 import com.wmt.smartnetdisk.vo.ShareVO;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * 公开分享控制器（无需登录）
@@ -37,14 +45,12 @@ public class PublicShareController {
      * 验证提取码
      */
     @PostMapping("/{code}/verify")
-    public Result<Map<String, String>> verifyPassword(
+    public Result<ShareVO> verifyPassword(
             @PathVariable("code") String shareCode,
             @RequestBody Map<String, String> body) {
         String password = body.get("password");
-        String url = shareService.verifyPassword(shareCode, password);
-        Map<String, String> data = new HashMap<>();
-        data.put("url", url);
-        return Result.success("验证成功", data);
+        ShareVO shareVO = shareService.verifyPasswordAndGetInfo(shareCode, password);
+        return Result.success("验证成功", shareVO);
     }
 
     /**
@@ -58,5 +64,16 @@ public class PublicShareController {
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);
+    }
+
+    /**
+     * 流式下载分享文件（直接传输，确保文件名正确）
+     */
+    @GetMapping("/{code}/download/stream")
+    public void downloadShareStream(
+            @PathVariable("code") String shareCode,
+            @RequestParam(required = false) String password,
+            jakarta.servlet.http.HttpServletResponse response) {
+        shareService.downloadShareStream(shareCode, password, response);
     }
 }

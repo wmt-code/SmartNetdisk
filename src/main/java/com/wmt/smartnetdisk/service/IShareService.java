@@ -59,6 +59,15 @@ public interface IShareService extends IService<Share> {
     String verifyPassword(String shareCode, String password);
 
     /**
+     * 验证提取码并返回完整的分享信息
+     *
+     * @param shareCode 分享码
+     * @param password  提取码
+     * @return 分享信息（包含文件名、大小等）
+     */
+    ShareVO verifyPasswordAndGetInfo(String shareCode, String password);
+
+    /**
      * 获取分享文件下载链接
      *
      * @param shareCode 分享码
@@ -66,6 +75,15 @@ public interface IShareService extends IService<Share> {
      * @return 下载 URL
      */
     String getDownloadUrl(String shareCode, String password);
+
+    /**
+     * 流式下载分享文件
+     *
+     * @param shareCode 分享码
+     * @param password  提取码（如果有的话）
+     * @param response  HTTP响应对象
+     */
+    void downloadShareStream(String shareCode, String password, jakarta.servlet.http.HttpServletResponse response);
 
     /**
      * 将分享实体转换为视图对象

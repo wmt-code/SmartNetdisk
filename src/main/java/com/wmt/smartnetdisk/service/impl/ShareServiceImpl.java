@@ -1,5 +1,21 @@
 package com.wmt.smartnetdisk.service.impl;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.servlet.http.HttpServletResponse;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -17,15 +33,9 @@ import com.wmt.smartnetdisk.service.IShareService;
 import com.wmt.smartnetdisk.utils.MinioUtils;
 import com.wmt.smartnetdisk.vo.ShareVO;
 import com.wmt.smartnetdisk.vo.SpaceVO;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
 
 /**
  * 分享服务实现类
@@ -85,6 +95,14 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
         vo.setFileName(fileInfo.getFileName());
         vo.setFileSize(fileInfo.getFileSize());
         vo.setFileSizeStr(SpaceVO.formatSize(fileInfo.getFileSize()));
+
+        // 获取文件扩展名作为文件类型
+        String fileName = fileInfo.getFileName();
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+            vo.setFileType(fileName.substring(dotIndex + 1));
+        }
+
         return vo;
     }
 
@@ -99,13 +117,20 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
 
         List<ShareVO> voList = result.getRecords().stream()
                 .map(share -> {
-                    ShareVO vo = toVO(share, false);
+                    ShareVO vo = toVO(share, true);
                     // 查询文件信息
                     FileInfo fileInfo = fileService.getById(share.getFileId());
                     if (fileInfo != null) {
                         vo.setFileName(fileInfo.getFileName());
                         vo.setFileSize(fileInfo.getFileSize());
                         vo.setFileSizeStr(SpaceVO.formatSize(fileInfo.getFileSize()));
+
+                        // 获取文件扩展名作为文件类型
+                        String fileName = fileInfo.getFileName();
+                        int dotIndex = fileName.lastIndexOf('.');
+                        if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+                            vo.setFileType(fileName.substring(dotIndex + 1));
+                        }
                     }
                     return vo;
                 })
@@ -146,6 +171,13 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
             vo.setFileName(fileInfo.getFileName());
             vo.setFileSize(fileInfo.getFileSize());
             vo.setFileSizeStr(SpaceVO.formatSize(fileInfo.getFileSize()));
+
+            // 获取文件扩展名作为文件类型
+            String fileName = fileInfo.getFileName();
+            int dotIndex = fileName.lastIndexOf('.');
+            if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+                vo.setFileType(fileName.substring(dotIndex + 1));
+            }
         }
         return vo;
     }
@@ -170,7 +202,43 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
             throw new BusinessException(ResultCode.FILE_NOT_FOUND);
         }
 
-        return minioUtils.getPresignedUrl(fileInfo.getStoragePath(), 3600);
+        return minioUtils.getDownloadUrl(fileInfo.getStoragePath(), fileInfo.getFileName(), 3600);
+    }
+
+    @Override
+    public ShareVO verifyPasswordAndGetInfo(String shareCode, String password) {
+        Share share = baseMapper.selectByShareCode(shareCode);
+        if (share == null) {
+            throw new BusinessException(ResultCode.SHARE_NOT_FOUND);
+        }
+
+        checkShareValid(share);
+
+        // 验证提取码
+        if (!share.getPassword().equals(password)) {
+            throw new BusinessException(ResultCode.SHARE_PASSWORD_ERROR);
+        }
+
+        // 获取文件信息
+        FileInfo fileInfo = fileService.getById(share.getFileId());
+        if (fileInfo == null) {
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND);
+        }
+
+        // 构建返回对象（不包含提取码）
+        ShareVO vo = toVO(share, false);
+        vo.setFileName(fileInfo.getFileName());
+        vo.setFileSize(fileInfo.getFileSize());
+        vo.setFileSizeStr(SpaceVO.formatSize(fileInfo.getFileSize()));
+
+        // 获取文件扩展名作为文件类型
+        String fileName = fileInfo.getFileName();
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < fileName.length() - 1) {
+            vo.setFileType(fileName.substring(dotIndex + 1));
+        }
+
+        return vo;
     }
 
     @Override
@@ -185,6 +253,62 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
         }
 
         return url;
+    }
+
+    @Override
+    public void downloadShareStream(String shareCode, String password, HttpServletResponse response) {
+        // 验证分享码
+        Share share = baseMapper.selectByShareCode(shareCode);
+        if (share == null) {
+            throw new BusinessException(ResultCode.SHARE_NOT_FOUND);
+        }
+
+        // 检查分享是否有效
+        checkShareValid(share);
+
+        // 验证提取码
+        if (password == null || !share.getPassword().equals(password)) {
+            throw new BusinessException(ResultCode.SHARE_PASSWORD_ERROR);
+        }
+
+        // 获取文件信息
+        FileInfo fileInfo = fileService.getById(share.getFileId());
+        if (fileInfo == null) {
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND);
+        }
+
+        try (InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath());
+             OutputStream outputStream = response.getOutputStream()) {
+
+            // 设置响应头，使用原始文件名
+            String fileName = fileInfo.getFileName();
+            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+
+            response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"" + encodedFileName + "\"; filename*=UTF-8''" + encodedFileName);
+            response.setHeader(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileInfo.getFileSize()));
+
+            // 流式传输
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            outputStream.flush();
+
+            // 增加下载次数
+            baseMapper.incrementDownloadCount(share.getId());
+
+            log.info("分享文件下载成功: shareCode={}, fileName={}", shareCode, fileName);
+        } catch (Exception e) {
+            log.error("分享文件下载失败: shareCode={}", shareCode, e);
+            try {
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            } catch (Exception ignored) {
+                // 响应可能已经提交，忽略错误
+            }
+        }
     }
 
     @Override
