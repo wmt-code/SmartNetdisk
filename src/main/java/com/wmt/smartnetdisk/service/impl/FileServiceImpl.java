@@ -12,11 +12,14 @@ import com.wmt.smartnetdisk.dto.request.FileListDTO;
 import com.wmt.smartnetdisk.entity.FileInfo;
 import com.wmt.smartnetdisk.entity.User;
 import com.wmt.smartnetdisk.mapper.FileInfoMapper;
+import com.wmt.smartnetdisk.service.IAiService;
 import com.wmt.smartnetdisk.service.IFileService;
+import com.wmt.smartnetdisk.service.IFolderService;
 import com.wmt.smartnetdisk.service.IUserService;
 import com.wmt.smartnetdisk.utils.Md5Utils;
 import com.wmt.smartnetdisk.utils.MinioUtils;
 import com.wmt.smartnetdisk.vo.FileVO;
+import com.wmt.smartnetdisk.vo.FolderVO;
 import com.wmt.smartnetdisk.vo.SpaceVO;
 import com.wmt.smartnetdisk.vo.UploadResultVO;
 import lombok.RequiredArgsConstructor;
@@ -42,8 +45,35 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     private final IUserService userService;
     private final MinioUtils minioUtils;
 
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private IAiService aiService;
+
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private IFolderService folderService;
+
     @Override
     public PageResult<FileVO> listFiles(Long userId, FileListDTO listDTO) {
+        // 如果有文件类型过滤且不是folder，则不查询文件夹
+        boolean includeFolder = listDTO.getFileType() == null || listDTO.getFileType().isBlank();
+
+        List<FileVO> resultList = new java.util.ArrayList<>();
+        long totalFolders = 0;
+
+        // 1. 查询当前目录下的文件夹（除非有特定文件类型过滤）
+        if (includeFolder && (listDTO.getKeyword() == null || listDTO.getKeyword().isBlank())) {
+            if (folderService != null) {
+                List<FolderVO> folders = folderService.getChildren(userId, listDTO.getFolderId());
+                totalFolders = folders.size();
+                // 将文件夹转换为 FileVO 格式
+                for (FolderVO folder : folders) {
+                    resultList.add(folderToFileVO(folder));
+                }
+            }
+        }
+
+        // 2. 查询文件
         LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FileInfo::getUserId, userId)
                 .eq(FileInfo::getDeleted, 0)
@@ -73,8 +103,31 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         Page<FileInfo> page = new Page<>(listDTO.getPageNum(), listDTO.getPageSize());
         Page<FileInfo> result = baseMapper.selectPage(page, wrapper);
 
-        List<FileVO> voList = result.getRecords().stream().map(this::toVO).toList();
-        return PageResult.of(result.getCurrent(), result.getSize(), result.getTotal(), voList);
+        // 3. 合并结果（文件夹在前，文件在后）
+        List<FileVO> fileVoList = result.getRecords().stream().map(this::toVO).toList();
+        resultList.addAll(fileVoList);
+
+        long total = totalFolders + result.getTotal();
+        return PageResult.of(result.getCurrent(), result.getSize(), total, resultList);
+    }
+
+    /**
+     * 将 FolderVO 转换为 FileVO（用于统一列表显示）
+     */
+    private FileVO folderToFileVO(FolderVO folder) {
+        FileVO vo = new FileVO();
+        vo.setId(folder.getId());
+        vo.setFileName(folder.getFolderName());
+        vo.setFileSize(0L);
+        vo.setFileSizeStr("-");
+        vo.setFileType("folder");
+        vo.setFileExt("");
+        vo.setThumbnailPath(null);
+        vo.setIsVectorized(false);
+        vo.setFolderId(folder.getParentId());
+        vo.setCreateTime(folder.getCreateTime());
+        vo.setUpdateTime(folder.getCreateTime()); // FolderVO 没有 updateTime，使用 createTime
+        return vo;
     }
 
     @Override
@@ -160,6 +213,11 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         // 更新用户已用空间（副本也占用空间配额）
         userService.updateUsedSpace(userId, sourceFile.getFileSize());
 
+        // 如果文件类型支持向量化，异步触发向量化
+        if (aiService.isFileVectorizable(newFile.getFileExt())) {
+            aiService.vectorizeDocumentAsync(userId, newFile.getId());
+        }
+
         log.info("文件复制成功: userId={}, sourceFileId={}, newFileId={}, targetFolderId={}",
                 userId, fileId, newFile.getId(), targetFolderId);
         return toVO(newFile);
@@ -234,11 +292,20 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         if (fileInfo == null || !fileInfo.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FILE_NOT_FOUND);
         }
+        // 检查文件是否已删除
+        if (fileInfo.getDeleted() == 1) {
+            log.warn("文件已在回收站中: fileId={}", fileId);
+            return;
+        }
         // 软删除（移入回收站）
         fileInfo.setDeleted(1);
         fileInfo.setDeleteTime(LocalDateTime.now());
-        updateById(fileInfo);
-        log.info("文件移入回收站: fileId={}", fileId);
+        boolean updated = updateById(fileInfo);
+        if (!updated) {
+            log.error("文件删除失败，数据库更新失败: fileId={}", fileId);
+            throw new BusinessException(ResultCode.DATA_UPDATE_FAIL, "文件删除失败");
+        }
+        log.info("文件移入回收站成功: fileId={}, fileName={}", fileId, fileInfo.getFileName());
     }
 
     @Override
@@ -352,6 +419,18 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         userService.updateUsedSpace(userId, fastUploadDTO.getFileSize());
 
         log.info("秒传成功: userId={}, fileName={}", userId, fastUploadDTO.getFileName());
+
+        // 如果文件类型支持向量化，异步触发向量化
+        String fileExt = "";
+        int dotIndex = fastUploadDTO.getFileName().lastIndexOf(".");
+        if (dotIndex >= 0) {
+            fileExt = fastUploadDTO.getFileName().substring(dotIndex + 1);
+        }
+        if (aiService.isFileVectorizable(fileExt)) {
+            aiService.vectorizeDocumentAsync(userId, newFile.getId());
+            log.info("已触发异步向量化(秒传): fileId={}, fileExt={}", newFile.getId(), fileExt);
+        }
+
         return UploadResultVO.fastUpload(newFile.getId(), newFile.getFileName());
     }
 
@@ -396,13 +475,26 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         userService.updateUsedSpace(userId, file.getSize());
 
         log.info("文件上传成功: userId={}, fileName={}, size={}", userId, originalFilename, file.getSize());
+
+        // 如果文件类型支持向量化，异步触发向量化
+        if (aiService.isFileVectorizable(fileExt)) {
+            aiService.vectorizeDocumentAsync(userId, newFile.getId());
+            log.info("已触发异步向量化: fileId={}, fileExt={}", newFile.getId(), fileExt);
+        }
+
         return UploadResultVO.normalUpload(newFile.getId(), originalFilename, file.getSize(), fileMd5);
     }
 
     @Override
-    public String getFileUrl(Long userId, Long fileId, int expiry) {
+    public String getDownloadUrl(Long userId, Long fileId, int expiry) {
         FileInfo fileInfo = getFileWithPermission(userId, fileId);
-        return minioUtils.getPresignedUrl(fileInfo.getStoragePath(), expiry);
+        return minioUtils.getDownloadUrl(fileInfo.getStoragePath(), fileInfo.getFileName(), expiry);
+    }
+
+    @Override
+    public String getPreviewUrl(Long userId, Long fileId, int expiry) {
+        FileInfo fileInfo = getFileWithPermission(userId, fileId);
+        return minioUtils.getPreviewUrl(fileInfo.getStoragePath(), fileInfo.getMimeType(), expiry);
     }
 
     @Override

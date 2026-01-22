@@ -100,8 +100,8 @@ public class FileInfo implements Serializable {
 
     /**
      * 逻辑删除: 0-未删除, 1-已删除
+     * 注意：不使用 @TableLogic，手动管理删除逻辑以支持回收站功能
      */
-    @TableLogic
     @TableField(fill = FieldFill.INSERT)
     private Integer deleted;
 

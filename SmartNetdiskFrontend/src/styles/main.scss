@@ -23,15 +23,519 @@
     --font-family: 'Inter', sans-serif;
 }
 
+* {
+    box-sizing: border-box;
+}
+
 body {
     font-family: var(--font-family);
     background-color: var(--color-background);
     color: var(--color-text);
     margin: 0;
+    padding: 0;
     -webkit-font-smoothing: antialiased;
 }
 
-// Glassmorphism Utilities
+// ==================== Layout Utilities ====================
+
+// Display
+.flex {
+    display: flex;
+}
+
+.inline-flex {
+    display: inline-flex;
+}
+
+.block {
+    display: block;
+}
+
+.hidden {
+    display: none;
+}
+
+// Flex Direction
+.flex-col {
+    flex-direction: column;
+}
+
+.flex-row {
+    flex-direction: row;
+}
+
+// Flex Properties
+.flex-1 {
+    flex: 1 1 0%;
+}
+
+.flex-auto {
+    flex: 1 1 auto;
+}
+
+.flex-none {
+    flex: none;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+// Justify Content
+.justify-start {
+    justify-content: flex-start;
+}
+
+.justify-end {
+    justify-content: flex-end;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.justify-around {
+    justify-content: space-around;
+}
+
+// Align Items
+.items-start {
+    align-items: flex-start;
+}
+
+.items-end {
+    align-items: flex-end;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.items-stretch {
+    align-items: stretch;
+}
+
+// Gap
+.gap-1 {
+    gap: 0.25rem;
+}
+
+.gap-2 {
+    gap: 0.5rem;
+}
+
+.gap-3 {
+    gap: 0.75rem;
+}
+
+.gap-4 {
+    gap: 1rem;
+}
+
+.gap-6 {
+    gap: 1.5rem;
+}
+
+.gap-8 {
+    gap: 2rem;
+}
+
+// ==================== Sizing ====================
+
+.h-full {
+    height: 100%;
+}
+
+.h-screen {
+    height: 100vh;
+}
+
+.h-16 {
+    height: 4rem;
+}
+
+.w-full {
+    width: 100%;
+}
+
+.w-screen {
+    width: 100vw;
+}
+
+.max-w-xl {
+    max-width: 36rem;
+}
+
+// ==================== Spacing ====================
+
+// Margin
+.m-0 {
+    margin: 0;
+}
+
+.m-1 {
+    margin: 0.25rem;
+}
+
+.m-2 {
+    margin: 0.5rem;
+}
+
+.m-4 {
+    margin: 1rem;
+}
+
+.mt-1 {
+    margin-top: 0.25rem;
+}
+
+.mt-2 {
+    margin-top: 0.5rem;
+}
+
+.mt-4 {
+    margin-top: 1rem;
+}
+
+.mt-20 {
+    margin-top: 5rem;
+}
+
+.mb-1 {
+    margin-bottom: 0.25rem;
+}
+
+.mb-2 {
+    margin-bottom: 0.5rem;
+}
+
+.mb-4 {
+    margin-bottom: 1rem;
+}
+
+.ml-4 {
+    margin-left: 1rem;
+}
+
+.mr-4 {
+    margin-right: 1rem;
+}
+
+.mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.py-4 {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.pr-4 {
+    padding-right: 1rem;
+}
+
+.pl-0 {
+    padding-left: 0;
+}
+
+// Padding
+.p-0 {
+    padding: 0;
+}
+
+.p-1 {
+    padding: 0.25rem;
+}
+
+.p-1\.5 {
+    padding: 0.375rem;
+}
+
+.p-2 {
+    padding: 0.5rem;
+}
+
+.p-3 {
+    padding: 0.75rem;
+}
+
+.p-4 {
+    padding: 1rem;
+}
+
+.p-6 {
+    padding: 1.5rem;
+}
+
+.px-2 {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+.px-4 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.px-6 {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+.py-2 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.py-4 {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+// ==================== Borders ====================
+
+.rounded {
+    border-radius: 0.25rem;
+}
+
+.rounded-md {
+    border-radius: 0.375rem;
+}
+
+.rounded-lg {
+    border-radius: 0.5rem;
+}
+
+.rounded-xl {
+    border-radius: 0.75rem;
+}
+
+.rounded-2xl {
+    border-radius: 1rem;
+}
+
+.rounded-full {
+    border-radius: 9999px;
+}
+
+.border {
+    border-width: 1px;
+}
+
+.border-0 {
+    border-width: 0;
+}
+
+.border-t {
+    border-top-width: 1px;
+}
+
+.border-b {
+    border-bottom-width: 1px;
+}
+
+.border-l {
+    border-left-width: 1px;
+}
+
+.border-r {
+    border-right-width: 1px;
+}
+
+.border-r-0 {
+    border-right-width: 0;
+}
+
+.border-gray-100 {
+    border-color: #F3F4F6;
+}
+
+.border-gray-200 {
+    border-color: #E5E7EB;
+}
+
+// ==================== Colors ====================
+
+// Background Colors
+.bg-transparent {
+    background-color: transparent;
+}
+
+.bg-white {
+    background-color: #ffffff;
+}
+
+.bg-white\/50 {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.bg-white\/60 {
+    background-color: rgba(255, 255, 255, 0.6);
+}
+
+.bg-\[\#FAF5FF\] {
+    background-color: #FAF5FF;
+}
+
+// Text Colors
+.text-white {
+    color: #ffffff;
+}
+
+.text-gray-400 {
+    color: #9CA3AF;
+}
+
+.text-gray-500 {
+    color: #6B7280;
+}
+
+.text-gray-600 {
+    color: #4B5563;
+}
+
+.text-gray-700 {
+    color: #374151;
+}
+
+.text-\[\#7C3AED\] {
+    color: #7C3AED;
+}
+
+// ==================== Typography ====================
+
+.text-xs {
+    font-size: 0.75rem;
+    line-height: 1rem;
+}
+
+.text-sm {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+.text-base {
+    font-size: 1rem;
+    line-height: 1.5rem;
+}
+
+.text-lg {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+}
+
+.text-xl {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+}
+
+.text-2xl {
+    font-size: 1.5rem;
+    line-height: 2rem;
+}
+
+.font-normal {
+    font-weight: 400;
+}
+
+.font-medium {
+    font-weight: 500;
+}
+
+.font-semibold {
+    font-weight: 600;
+}
+
+.font-bold {
+    font-weight: 700;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// ==================== Effects ====================
+
+.overflow-auto {
+    overflow: auto;
+}
+
+.overflow-hidden {
+    overflow: hidden;
+}
+
+.relative {
+    position: relative;
+}
+
+.absolute {
+    position: absolute;
+}
+
+.fixed {
+    position: fixed;
+}
+
+.transition-colors {
+    transition-property: color, background-color, border-color;
+    transition-duration: 150ms;
+}
+
+// ==================== Hover States ====================
+
+.hover\:bg-white\/50:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+// ==================== Grid ====================
+
+.grid {
+    display: grid;
+}
+
+.grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+    .sm\:grid-cols-4 {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 768px) {
+    .md\:grid-cols-6 {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1024px) {
+    .lg\:grid-cols-8 {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+}
+
+// ==================== Glassmorphism Utilities ====================
+
 .glass-panel {
     background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(12px);
@@ -55,12 +559,18 @@ body {
     }
 }
 
-// Cursor Pointer Utility
+// ==================== Cursor Utilities ====================
+
 .cursor-pointer {
     cursor: pointer;
 }
 
-// Element Plus Overrides
+.cursor-default {
+    cursor: default;
+}
+
+// ==================== Element Plus Overrides ====================
+
 .el-button--primary {
     --el-button-bg-color: var(--color-primary);
     --el-button-border-color: var(--color-primary);
@@ -71,4 +581,15 @@ body {
 .el-button {
     font-weight: 600;
     border-radius: 8px;
+}
+
+// Fix Element Plus menu background
+.el-menu {
+    background-color: transparent !important;
+}
+
+.el-menu-item {
+    &.is-active {
+        background-color: rgba(124, 58, 237, 0.1) !important;
+    }
 }

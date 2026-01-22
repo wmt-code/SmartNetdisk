@@ -166,14 +166,24 @@ public interface IFileService extends IService<FileInfo> {
     UploadResultVO uploadFile(Long userId, MultipartFile file, Long folderId);
 
     /**
-     * 获取文件下载/预览 URL
+     * 获取文件下载 URL（触发浏览器下载）
      *
      * @param userId 用户ID
      * @param fileId 文件ID
      * @param expiry 有效期（秒）
-     * @return 预签名 URL
+     * @return 预签名下载 URL
      */
-    String getFileUrl(Long userId, Long fileId, int expiry);
+    String getDownloadUrl(Long userId, Long fileId, int expiry);
+
+    /**
+     * 获取文件预览 URL（浏览器内联显示）
+     *
+     * @param userId 用户ID
+     * @param fileId 文件ID
+     * @param expiry 有效期（秒）
+     * @return 预签名预览 URL
+     */
+    String getPreviewUrl(Long userId, Long fileId, int expiry);
 
     /**
      * 获取文件实体（验证用户权限）

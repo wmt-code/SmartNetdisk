@@ -58,6 +58,22 @@ public interface IAiService {
     String generateSummary(Long userId, Long fileId);
 
     /**
+     * 异步文档向量化（用于文件上传后自动触发）
+     *
+     * @param userId 用户ID
+     * @param fileId 文件ID
+     */
+    void vectorizeDocumentAsync(Long userId, Long fileId);
+
+    /**
+     * 检查文件是否支持向量化
+     *
+     * @param fileExt 文件扩展名
+     * @return 是否支持
+     */
+    boolean isFileVectorizable(String fileExt);
+
+    /**
      * 向量化状态
      */
     record VectorizeStatus(boolean isVectorized, int chunkCount) {

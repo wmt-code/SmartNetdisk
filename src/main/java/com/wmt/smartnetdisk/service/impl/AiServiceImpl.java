@@ -84,7 +84,7 @@ public class AiServiceImpl implements IAiService {
             doc.setTokenCount(chunk.length()); // 简化处理
             doc.setEmbeddingStr(VectorDocument.vectorToString(embedding));
 
-            vectorDocumentMapper.insert(doc);
+            vectorDocumentMapper.insertVectorDocument(doc);
         }
 
         // 更新文件向量化状态
@@ -105,8 +105,12 @@ public class AiServiceImpl implements IAiService {
     public SearchResultVO semanticSearch(Long userId, SemanticSearchDTO searchDTO) {
         long startTime = System.currentTimeMillis();
 
+        log.info("开始语义搜索: userId={}, query={}, topK={}, minScore={}",
+                userId, searchDTO.getQuery(), searchDTO.getTopK(), searchDTO.getMinScore());
+
         // 获取查询向量
         float[] queryEmbedding = getEmbedding(searchDTO.getQuery());
+        log.info("查询向量生成成功, 维度: {}", queryEmbedding.length);
         String embeddingStr = VectorDocument.vectorToString(queryEmbedding);
 
         // 执行向量搜索
@@ -115,6 +119,8 @@ public class AiServiceImpl implements IAiService {
                 embeddingStr,
                 searchDTO.getTopK(),
                 searchDTO.getMinScore());
+
+        log.info("向量搜索完成，找到 {} 条结果", results.size());
 
         // 构建返回结果
         SearchResultVO resultVO = new SearchResultVO();
@@ -316,12 +322,30 @@ public class AiServiceImpl implements IAiService {
     }
 
     /**
-     * 检查文件是否支持向量化
+     * 检查文件是否支持向量化（私有方法）
      */
     private boolean isVectorizable(String ext) {
         if (ext == null) {
             return false;
         }
         return aiConfig.getVectorizableFileExtensions().contains(ext.toLowerCase());
+    }
+
+    @Override
+    public boolean isFileVectorizable(String fileExt) {
+        return isVectorizable(fileExt);
+    }
+
+    @Override
+    @org.springframework.scheduling.annotation.Async
+    public void vectorizeDocumentAsync(Long userId, Long fileId) {
+        try {
+            log.info("开始异步向量化文件: userId={}, fileId={}", userId, fileId);
+            vectorizeDocument(userId, fileId);
+            log.info("异步向量化完成: userId={}, fileId={}", userId, fileId);
+        } catch (Exception e) {
+            log.error("异步向量化失败: userId={}, fileId={}, error={}", userId, fileId, e.getMessage());
+            // 异步任务失败不抛出异常，只记录日志
+        }
     }
 }

@@ -72,6 +72,12 @@ public class VectorDocument implements Serializable {
     private Integer tokenCount;
 
     /**
+     * 相似度分数（搜索结果使用，非数据库字段）
+     */
+    @TableField(exist = false)
+    private Double similarity;
+
+    /**
      * 创建时间
      */
     @TableField(fill = FieldFill.INSERT)

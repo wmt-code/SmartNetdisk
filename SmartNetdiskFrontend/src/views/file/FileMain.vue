@@ -5,11 +5,13 @@
       <div class="left flex items-center gap-4">
         <!-- 面包屑导航 -->
         <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/files' }">
-            <el-icon><HomeFilled /></el-icon>
+          <el-breadcrumb-item>
+            <span class="cursor-pointer" @click="navigateToRoot">
+              <el-icon><HomeFilled /></el-icon>
+            </span>
           </el-breadcrumb-item>
-          <el-breadcrumb-item v-for="(segment, index) in pathSegments" :key="index">
-            {{ segment }}
+          <el-breadcrumb-item v-for="(segment, index) in folderPath" :key="segment.id">
+            <span class="cursor-pointer" @click="navigateToFolder(segment.id, index)">{{ segment.name }}</span>
           </el-breadcrumb-item>
         </el-breadcrumb>
       </div>
@@ -94,20 +96,34 @@
             {{ formatTime(row.updateTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" :width="isRecycleBin ? 140 : 180" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click.stop="handleDownload(row)">
-              <el-icon><Download /></el-icon>
-            </el-button>
-            <el-button link type="primary" @click.stop="handleShare(row)">
-              <el-icon><Share /></el-icon>
-            </el-button>
-            <el-button link type="primary" @click.stop="showRenameDialog(row)">
-              <el-icon><Edit /></el-icon>
-            </el-button>
-            <el-button link type="danger" @click.stop="handleDelete(row)">
-              <el-icon><Delete /></el-icon>
-            </el-button>
+            <!-- 回收站操作 -->
+            <template v-if="isRecycleBin">
+              <el-button link type="primary" @click.stop="handleRestore(row)">
+                <el-icon><RefreshLeft /></el-icon>
+                恢复
+              </el-button>
+              <el-button link type="danger" @click.stop="handlePermanentDelete(row)">
+                <el-icon><Delete /></el-icon>
+                彻底删除
+              </el-button>
+            </template>
+            <!-- 正常操作 -->
+            <template v-else>
+              <el-button link type="primary" @click.stop="handleDownload(row)">
+                <el-icon><Download /></el-icon>
+              </el-button>
+              <el-button link type="primary" @click.stop="handleShare(row)">
+                <el-icon><Share /></el-icon>
+              </el-button>
+              <el-button link type="primary" @click.stop="showRenameDialog(row)">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+              <el-button link type="danger" @click.stop="handleDelete(row)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -178,6 +194,15 @@
         <el-progress :percentage="item.progress" :status="item.error ? 'exception' : undefined" />
       </div>
     </el-dialog>
+
+    <!-- 分享对话框 -->
+    <ShareDialog
+      v-model="shareDialogVisible"
+      :file-id="shareTargetFile?.id || 0"
+      :file-name="shareTargetFile?.fileName || ''"
+      :file-size-str="shareTargetFile?.fileSizeStr"
+      @success="handleShareSuccess"
+    />
   </div>
 </template>
 
@@ -187,12 +212,14 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   HomeFilled, FolderAdd, Upload, Document, Folder, List, Grid,
   Download, Share, Delete, Picture, VideoPlay, Headset, FolderOpened,
-  Loading, Edit
+  Loading, Edit, RefreshLeft
 } from '@element-plus/icons-vue'
+import ShareDialog from '@/components/ShareDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   getFileList, uploadFile, deleteFile, renameFile, getDownloadUrl,
-  createFolder, type FileInfo 
+  createFolder, restoreFile, permanentDeleteFile, getRecycleList,
+  type FileInfo 
 } from '@/api/file'
 import { useUserStore } from '@/stores/user'
 
@@ -237,13 +264,8 @@ const selectedFiles = ref<FileInfo[]>([])
 // 文件列表
 const fileList = ref<FileInfo[]>([])
 
-// 面包屑路径
-const pathSegments = computed(() => {
-  const path = route.params.path
-  if (!path) return []
-  if (Array.isArray(path)) return path
-  return path.split('/')
-})
+// 文件夹路径（用于面包屑导航）
+const folderPath = ref<{ id: number; name: string }[]>([])
 
 // 判断是否是回收站
 const isRecycleBin = computed(() => route.meta?.isRecycle === true)
@@ -281,12 +303,18 @@ const formatTime = (time: string) => {
 async function loadFileList() {
   loading.value = true
   try {
-    const result = await getFileList({
-      folderId: currentFolderId.value,
-      pageNum: currentPage.value,
-      pageSize: pageSize.value,
-      fileType: route.meta?.fileType as string | undefined
-    })
+    // 根据是否是回收站选择不同的 API
+    const result = isRecycleBin.value
+      ? await getRecycleList({
+          pageNum: currentPage.value,
+          pageSize: pageSize.value
+        })
+      : await getFileList({
+          folderId: currentFolderId.value,
+          pageNum: currentPage.value,
+          pageSize: pageSize.value,
+          fileType: route.meta?.fileType as string | undefined
+        })
     fileList.value = result.records
     total.value = result.total
   } catch (error) {
@@ -303,14 +331,32 @@ const handleSelectionChange = (selection: FileInfo[]) => {
 
 const handleRowDblClick = (row: FileInfo) => {
   if (row.fileType === 'folder') {
-    // TODO: 需要后端支持 folder 类型
-    const currentPath = route.params.path || ''
-    const newPath = currentPath ? `${currentPath}/${row.fileName}` : row.fileName
-    router.push(`/files/${newPath}`)
+    // 更新当前文件夹 ID
+    folderPath.value.push({ id: row.id, name: row.fileName })
+    currentFolderId.value = row.id
+    currentPage.value = 1
+    loadFileList()
   } else {
     // 预览文件
     handlePreview(row)
   }
+}
+
+// 导航到根目录
+const navigateToRoot = () => {
+  folderPath.value = []
+  currentFolderId.value = 0
+  currentPage.value = 1
+  loadFileList()
+}
+
+// 导航到指定文件夹
+const navigateToFolder = (folderId: number, index: number) => {
+  // 截取路径到指定位置
+  folderPath.value = folderPath.value.slice(0, index + 1)
+  currentFolderId.value = folderId
+  currentPage.value = 1
+  loadFileList()
 }
 
 const handleContextMenu = (event: MouseEvent, row: FileInfo) => {
@@ -424,10 +470,22 @@ const handlePreview = async (row: FileInfo) => {
   }
 }
 
+// 分享相关
+const shareDialogVisible = ref(false)
+const shareTargetFile = ref<FileInfo | null>(null)
+
 const handleShare = (row: FileInfo) => {
-  console.log('分享:', row.fileName)
-  ElMessage.info('分享功能开发中')
-  // TODO: 实现分享功能
+  if (row.fileType === 'folder') {
+    ElMessage.warning('暂不支持分享文件夹')
+    return
+  }
+  shareTargetFile.value = row
+  shareDialogVisible.value = true
+}
+
+const handleShareSuccess = () => {
+  // 分享创建成功的回调
+  console.log('分享创建成功')
 }
 
 const showRenameDialog = (row: FileInfo) => {
@@ -458,7 +516,7 @@ const handleRename = async () => {
 const handleDelete = async (row: FileInfo) => {
   try {
     await ElMessageBox.confirm(
-      isRecycleBin.value ? '确定要彻底删除此文件吗？此操作不可恢复！' : '确定要删除此文件吗？文件将移入回收站。',
+      '确定要删除此文件吗？文件将移入回收站。',
       '删除确认',
       {
         confirmButtonText: '确定',
@@ -474,6 +532,41 @@ const handleDelete = async (row: FileInfo) => {
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
+    }
+  }
+}
+
+// 恢复文件（回收站）
+const handleRestore = async (row: FileInfo) => {
+  try {
+    await restoreFile(row.id)
+    ElMessage.success('文件已恢复')
+    await loadFileList()
+  } catch (error) {
+    console.error('恢复失败:', error)
+  }
+}
+
+// 彻底删除文件（回收站）
+const handlePermanentDelete = async (row: FileInfo) => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要彻底删除此文件吗？此操作不可恢复！',
+      '彻底删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error'
+      }
+    )
+
+    await permanentDeleteFile(row.id)
+    ElMessage.success('文件已彻底删除')
+    userStore.updateUsedSpace(-row.fileSize)
+    await loadFileList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('彻底删除失败:', error)
     }
   }
 }

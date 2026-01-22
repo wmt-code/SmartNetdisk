@@ -112,7 +112,7 @@ public class FileController {
     public Result<Map<String, String>> getDownloadUrl(@PathVariable("id") Long fileId) {
         Long userId = authService.getCurrentUserId();
         // 下载链接有效期：1小时
-        String url = fileService.getFileUrl(userId, fileId, 3600);
+        String url = fileService.getDownloadUrl(userId, fileId, 3600);
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);
@@ -125,7 +125,7 @@ public class FileController {
     public Result<Map<String, String>> getPreviewUrl(@PathVariable("id") Long fileId) {
         Long userId = authService.getCurrentUserId();
         // 预览链接有效期：10分钟
-        String url = fileService.getFileUrl(userId, fileId, 600);
+        String url = fileService.getPreviewUrl(userId, fileId, 600);
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);

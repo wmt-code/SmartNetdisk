@@ -149,6 +149,77 @@ public class MinioUtils {
     }
 
     /**
+     * 获取文件下载 URL（带文件名，触发浏览器下载）
+     * <p>
+     * 通过设置 response-content-disposition 参数强制浏览器下载
+     * 使用 RFC 5987 编码处理中文文件名
+     * </p>
+     *
+     * @param storagePath 存储路径
+     * @param fileName    原始文件名
+     * @param expiry      有效期（秒）
+     * @return 预签名下载 URL
+     */
+    public String getDownloadUrl(String storagePath, String fileName, int expiry) {
+        try {
+            // 使用 RFC 5987 编码处理文件名（支持中文）
+            String encodedFileName = java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            String contentDisposition = "attachment; filename=\"" + fileName + "\"; filename*=UTF-8''"
+                    + encodedFileName;
+
+            java.util.Map<String, String> extraQueryParams = new java.util.HashMap<>();
+            extraQueryParams.put("response-content-disposition", contentDisposition);
+
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(storagePath)
+                            .method(Method.GET)
+                            .expiry(expiry, TimeUnit.SECONDS)
+                            .extraQueryParams(extraQueryParams)
+                            .build());
+        } catch (Exception e) {
+            log.error("获取下载URL失败: {}", storagePath, e);
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND, "获取下载链接失败");
+        }
+    }
+
+    /**
+     * 获取文件预览 URL（内联显示）
+     * <p>
+     * 通过设置 response-content-disposition 为 inline 让浏览器直接显示
+     * 同时设置正确的 Content-Type
+     * </p>
+     *
+     * @param storagePath 存储路径
+     * @param mimeType    MIME 类型
+     * @param expiry      有效期（秒）
+     * @return 预签名预览 URL
+     */
+    public String getPreviewUrl(String storagePath, String mimeType, int expiry) {
+        try {
+            java.util.Map<String, String> extraQueryParams = new java.util.HashMap<>();
+            extraQueryParams.put("response-content-disposition", "inline");
+            if (mimeType != null && !mimeType.isBlank()) {
+                extraQueryParams.put("response-content-type", mimeType);
+            }
+
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(storagePath)
+                            .method(Method.GET)
+                            .expiry(expiry, TimeUnit.SECONDS)
+                            .extraQueryParams(extraQueryParams)
+                            .build());
+        } catch (Exception e) {
+            log.error("获取预览URL失败: {}", storagePath, e);
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND, "获取预览链接失败");
+        }
+    }
+
+    /**
      * 删除文件
      *
      * @param storagePath 存储路径

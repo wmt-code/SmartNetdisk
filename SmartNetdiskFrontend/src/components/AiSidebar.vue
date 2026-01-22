@@ -101,18 +101,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { MagicStick, Close, ChatDotRound, Search, Promotion, Loading } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { semanticSearch, chat, type SearchResult, type FileReference } from '@/api/ai'
 
+const router = useRouter()
 const isOpen = ref(false)
 const mode = ref<'chat' | 'search'>('chat')
 const inputText = ref('')
 const isLoading = ref(false)
+const chatAreaRef = ref<HTMLElement>()
 
 interface Message {
   role: 'user' | 'ai'
   content: string
-  references?: string[]
+  references?: { fileId?: number; fileName: string; matchedContent?: string }[]
+  searchResults?: SearchResult[]
 }
 
 const messages = ref<Message[]>([
@@ -122,6 +128,16 @@ const messages = ref<Message[]>([
   }
 ])
 
+// 滚动到底部
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (chatAreaRef.value) {
+      chatAreaRef.value.scrollTop = chatAreaRef.value.scrollHeight
+    }
+  })
+}
+
+// 发送消息
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
 
@@ -129,25 +145,81 @@ const sendMessage = async () => {
   messages.value.push({ role: 'user', content: userMessage })
   inputText.value = ''
   isLoading.value = true
+  scrollToBottom()
 
-  // 模拟 AI 响应
-  setTimeout(() => {
-    if (mode.value === 'chat') {
-      messages.value.push({
-        role: 'ai',
-        content: '根据您的文档分析，这个项目是一个智能云存储系统，具备 AI 语义搜索和智能问答功能，支持极速秒传和分片上传。',
-        references: ['项目文档/README.md', '产品设计.pdf']
-      })
+  try {
+    if (mode.value === 'search') {
+      // 语义搜索
+      const results = await semanticSearch(userMessage, 10)
+      if (results.length > 0) {
+        messages.value.push({
+          role: 'ai',
+          content: `找到 ${results.length} 个与您描述相关的文件：`,
+          searchResults: results
+        })
+      } else {
+        messages.value.push({
+          role: 'ai',
+          content: '抱歉，没有找到与您描述相关的文件。请尝试使用不同的关键词或描述方式。'
+        })
+      }
     } else {
+      // 智能问答
+      const history = messages.value
+        .filter(m => m.role === 'user' || m.role === 'ai')
+        .slice(-10) // 保留最近10条历史
+        .map(m => ({
+          role: m.role === 'user' ? 'user' as const : 'assistant' as const,
+          content: m.content
+        }))
+      
+      const response = await chat({ question: userMessage, history })
+      
       messages.value.push({
         role: 'ai',
-        content: '找到以下与您描述相关的文件：',
-        references: ['产品设计.pdf', '项目文档/需求分析.docx', '会议记录.docx']
+        content: response.answer,
+        references: response.references.map((ref: FileReference) => ({
+          fileId: ref.fileId,
+          fileName: ref.fileName,
+          matchedContent: ref.matchedContent
+        }))
       })
     }
+  } catch (error) {
+    console.error('AI 请求失败:', error)
+    messages.value.push({
+      role: 'ai',
+      content: '抱歉，AI 服务暂时不可用。请稍后重试。'
+    })
+    ElMessage.error('AI 服务请求失败')
+  } finally {
     isLoading.value = false
-  }, 1500)
+    scrollToBottom()
+  }
 }
+
+// 清空对话
+const clearChat = () => {
+  messages.value = [{
+    role: 'ai',
+    content: '对话已清空。有什么可以帮您的吗？'
+  }]
+}
+
+// 跳转到文件
+const goToFile = (fileId?: number) => {
+  if (fileId) {
+    // TODO: 实现跳转到具体文件
+    router.push('/files')
+  }
+}
+
+// 暴露方法供外部调用
+defineExpose({
+  open: () => { isOpen.value = true },
+  close: () => { isOpen.value = false },
+  toggle: () => { isOpen.value = !isOpen.value }
+})
 </script>
 
 <style scoped>

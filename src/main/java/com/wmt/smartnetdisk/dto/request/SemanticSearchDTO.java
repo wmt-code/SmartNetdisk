@@ -24,7 +24,7 @@ public class SemanticSearchDTO {
     private Integer topK = 5;
 
     /**
-     * 最小相似度阈值（默认0.5）
+     * 最小相似度阈值（默认0.2，降低以提高召回率）
      */
-    private Double minScore = 0.5;
+    private Double minScore = 0.2;
 }

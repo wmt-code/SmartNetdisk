@@ -19,6 +19,9 @@ spring:
           min-idle: 0
           max-wait: 1000ms
       timeout: 3000ms
+  servlet:
+    multipart:
+      max-file-size: 1TB
 #  profiles:
 #    active: dev
 server:
@@ -33,9 +36,10 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: auto
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
+      # 移除全局逻辑删除配置，手动管理 deleted 字段以支持回收站功能
+      # logic-delete-field: deleted
+      # logic-delete-value: 1
+      # logic-not-delete-value: 0
 
 # MinIO 配置
 minio:

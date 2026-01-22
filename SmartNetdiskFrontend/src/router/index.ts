@@ -32,7 +32,7 @@ const router = createRouter({
         {
           path: 'shares',
           name: 'MyShares',
-          component: () => import('@/views/file/FileMain.vue'),
+          component: () => import('@/views/MySharesView.vue'),
           meta: { title: '我的分享' }
         },
         {
