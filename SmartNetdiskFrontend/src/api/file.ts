@@ -135,7 +135,7 @@ export async function checkChunks(params: {
 }
 
 /**
- * 上传单个分片
+ * 上传单个分片（带重试机制）
  */
 export async function uploadChunk(
     chunk: Blob,
@@ -144,7 +144,8 @@ export async function uploadChunk(
         chunkIndex: number
         totalChunks: number
         chunkSize: number
-    }
+    },
+    maxRetries: number = 3
 ): Promise<void> {
     const formData = new FormData()
     formData.append('file', chunk)
@@ -153,11 +154,27 @@ export async function uploadChunk(
     formData.append('totalChunks', String(params.totalChunks))
     formData.append('chunkSize', String(params.chunkSize))
 
-    await api.post<unknown, ApiResponse<void>>('/file/chunk', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
+    let lastError: Error | null = null
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            await api.post<unknown, ApiResponse<void>>('/file/chunk', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                },
+                timeout: 0 // 禁用超时，分片上传可能需要较长时间
+            })
+            return // 上传成功，直接返回
+        } catch (error) {
+            lastError = error as Error
+            console.warn(`分片 ${params.chunkIndex} 上传失败，第 ${attempt}/${maxRetries} 次重试`, error)
+            if (attempt < maxRetries) {
+                // 等待一段时间后重试（指数退避）
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+            }
         }
-    })
+    }
+    // 所有重试都失败
+    throw lastError
 }
 
 /**
@@ -170,7 +187,9 @@ export async function mergeChunks(params: {
     totalChunks: number
     folderId?: number
 }): Promise<UploadResult> {
-    const res = await api.post<unknown, ApiResponse<UploadResult>>('/file/merge', params)
+    const res = await api.post<unknown, ApiResponse<UploadResult>>('/file/merge', params, {
+        timeout: 0 // 禁用超时，合并大文件可能需要较长时间
+    })
     return res.data
 }
 
