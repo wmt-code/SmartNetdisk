@@ -213,6 +213,37 @@
       :selected-items="shareSelectedItems"
       @success="handleShareSuccess"
     />
+
+    <!-- 右键菜单 -->
+    <Teleport to="body">
+      <div
+        v-show="contextMenuVisible"
+        class="context-menu"
+        :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
+        @click.stop
+      >
+        <div 
+          v-if="contextMenuTarget?.fileType === 'folder'"
+          class="menu-item"
+          @click="handleContextMenuAction('open')"
+        >
+          <el-icon><FolderOpened /></el-icon> 打开
+        </div>
+        <div class="menu-item" @click="handleContextMenuAction('download')">
+          <el-icon><Download /></el-icon> 下载
+        </div>
+        <div class="menu-item" @click="handleContextMenuAction('share')">
+          <el-icon><Share /></el-icon> 分享
+        </div>
+        <el-divider class="menu-divider" />
+        <div class="menu-item" @click="handleContextMenuAction('rename')">
+          <el-icon><Edit /></el-icon> 重命名
+        </div>
+        <div class="menu-item danger" @click="handleContextMenuAction('delete')">
+          <el-icon><Delete /></el-icon> 删除
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -371,8 +402,50 @@ const navigateToFolder = (folderId: number, index: number) => {
 
 const handleContextMenu = (event: MouseEvent, row: FileInfo) => {
   event.preventDefault()
-  console.log('右键菜单:', row)
-  // TODO: 实现右键菜单
+  contextMenuTarget.value = row
+  contextMenuPosition.value = { x: event.clientX, y: event.clientY }
+  contextMenuVisible.value = true
+  
+  // 点击其他地方关闭菜单
+  const closeMenu = () => {
+    contextMenuVisible.value = false
+    document.removeEventListener('click', closeMenu)
+  }
+  document.addEventListener('click', closeMenu)
+}
+
+// 右键菜单状态
+const contextMenuVisible = ref(false)
+const contextMenuPosition = ref({ x: 0, y: 0 })
+const contextMenuTarget = ref<FileInfo | null>(null)
+
+// 处理右键菜单动作
+const handleContextMenuAction = (action: string) => {
+  if (!contextMenuTarget.value) return
+  const row = contextMenuTarget.value
+  
+  switch (action) {
+    case 'open':
+      handleRowDblClick(row)
+      break
+    case 'download':
+      if (row.fileType === 'folder') {
+        ElMessage.warning('文件夹暂不支持下载')
+      } else {
+        handleDownload(row)
+      }
+      break
+    case 'share':
+      handleShare(row)
+      break
+    case 'rename':
+      showRenameDialog(row)
+      break
+    case 'delete':
+      handleDelete(row)
+      break
+  }
+  contextMenuVisible.value = false
 }
 
 const triggerUpload = () => {
@@ -687,5 +760,46 @@ onMounted(() => {
   background: #f9fafb;
   padding: 12px;
   border-radius: 8px;
+}
+
+/* 右键菜单样式 */
+.context-menu {
+  position: fixed;
+  z-index: 2000;
+  background: white;
+  min-width: 140px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #374151;
+  transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f3f4f6;
+  color: #7C3AED;
+}
+
+.menu-item.danger {
+  color: #EF4444;
+}
+
+.menu-item.danger:hover {
+  background-color: #FEF2F2;
+}
+
+.menu-divider {
+  margin: 4px 0;
+  border-color: #e5e7eb;
 }
 </style>
