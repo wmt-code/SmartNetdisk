@@ -1,6 +1,7 @@
 package com.wmt.smartnetdisk.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -75,5 +76,54 @@ public class PublicShareController {
             @RequestParam(required = false) String password,
             jakarta.servlet.http.HttpServletResponse response) {
         shareService.downloadShareStream(shareCode, password, response);
+    }
+
+    /**
+     * 获取分享项列表（批量/目录分享时使用）
+     */
+    @GetMapping("/{code}/items")
+    public Result<List<ShareVO.ShareItemVO>> getShareItems(
+            @PathVariable("code") String shareCode,
+            @RequestParam(required = false) String password) {
+        List<ShareVO.ShareItemVO> items = shareService.getShareItems(shareCode, password);
+        return Result.success(items);
+    }
+
+    /**
+     * 浏览分享文件夹内容（进入子文件夹）
+     */
+    @GetMapping("/{code}/browse")
+    public Result<List<ShareVO.ShareItemVO>> browseFolderContents(
+            @PathVariable("code") String shareCode,
+            @RequestParam(required = false) String password,
+            @RequestParam(defaultValue = "0") Long folderId) {
+        List<ShareVO.ShareItemVO> items = shareService.browseFolderContents(shareCode, password, folderId);
+        return Result.success(items);
+    }
+
+    /**
+     * 下载分享中的指定文件
+     */
+    @GetMapping("/{code}/download/{fileId}")
+    public Result<Map<String, String>> downloadFileById(
+            @PathVariable("code") String shareCode,
+            @PathVariable("fileId") Long fileId,
+            @RequestParam(required = false) String password) {
+        String url = shareService.getFileDownloadUrl(shareCode, password, fileId);
+        Map<String, String> data = new HashMap<>();
+        data.put("url", url);
+        return Result.success(data);
+    }
+
+    /**
+     * 流式下载分享中的指定文件
+     */
+    @GetMapping("/{code}/download/{fileId}/stream")
+    public void downloadFileByIdStream(
+            @PathVariable("code") String shareCode,
+            @PathVariable("fileId") Long fileId,
+            @RequestParam(required = false) String password,
+            jakarta.servlet.http.HttpServletResponse response) {
+        shareService.downloadFileStream(shareCode, password, fileId, response);
     }
 }

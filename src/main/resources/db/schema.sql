@@ -312,3 +312,20 @@ ON CONFLICT DO NOTHING;
 -- ===========================================
 -- 迁移脚本 v2.0.0 完成！
 -- ===========================================
+
+-- ===========================================
+-- 数据库优化脚本 - 文件查询性能优化
+-- 创建日期: 2026-01-23
+-- ===========================================
+
+-- 1. 优化文件表复合索引（包含deleted字段，避免回表）
+DROP INDEX IF EXISTS idx_file_user_folder;
+CREATE INDEX idx_file_user_folder_deleted ON file_info(user_id, folder_id, deleted);
+
+-- 2. 优化文件夹表复合索引（包含deleted字段）
+DROP INDEX IF EXISTS idx_folder_user_parent;
+CREATE INDEX idx_folder_user_parent_deleted ON folder(user_id, parent_id, deleted);
+
+-- 3. 添加覆盖索引优化统计查询
+CREATE INDEX IF NOT EXISTS idx_file_count_opt ON file_info(user_id, folder_id, deleted) WHERE deleted = 0;
+CREATE INDEX IF NOT EXISTS idx_folder_count_opt ON folder(user_id, parent_id, deleted) WHERE deleted = 0;

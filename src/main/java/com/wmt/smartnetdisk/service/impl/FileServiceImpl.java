@@ -55,25 +55,43 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
 
     @Override
     public PageResult<FileVO> listFiles(Long userId, FileListDTO listDTO) {
-        // 如果有文件类型过滤且不是folder，则不查询文件夹
-        boolean includeFolder = listDTO.getFileType() == null || listDTO.getFileType().isBlank();
+        // 无过滤条件时，使用优化的联合查询（单次查询）
+        boolean hasFileTypeFilter = listDTO.getFileType() != null && !listDTO.getFileType().isBlank();
+        boolean hasKeywordFilter = listDTO.getKeyword() != null && !listDTO.getKeyword().isBlank();
 
-        List<FileVO> resultList = new java.util.ArrayList<>();
-        long totalFolders = 0;
-
-        // 1. 查询当前目录下的文件夹（除非有特定文件类型过滤）
-        if (includeFolder && (listDTO.getKeyword() == null || listDTO.getKeyword().isBlank())) {
-            if (folderService != null) {
-                List<FolderVO> folders = folderService.getChildren(userId, listDTO.getFolderId());
-                totalFolders = folders.size();
-                // 将文件夹转换为 FileVO 格式
-                for (FolderVO folder : folders) {
-                    resultList.add(folderToFileVO(folder, userId));
-                }
-            }
+        if (!hasFileTypeFilter && !hasKeywordFilter) {
+            return listFilesOptimized(userId, listDTO);
         }
 
-        // 2. 查询文件
+        // 有过滤条件时，只查询文件（不含文件夹）
+        return listFilesFiltered(userId, listDTO);
+    }
+
+    /**
+     * 优化的文件列表查询（无过滤条件时使用）
+     * 使用 UNION ALL 单次查询文件夹和文件
+     */
+    private PageResult<FileVO> listFilesOptimized(Long userId, FileListDTO listDTO) {
+        long offset = (listDTO.getPageNum() - 1) * listDTO.getPageSize();
+        int limit = listDTO.getPageSize();
+
+        // 单次查询获取文件夹+文件（已分页）
+        List<java.util.Map<String, Object>> rows = baseMapper.listFilesAndFolders(
+                userId, listDTO.getFolderId(), offset, limit);
+
+        // 获取总数
+        long total = baseMapper.countFilesAndFolders(userId, listDTO.getFolderId());
+
+        // 转换为 FileVO
+        List<FileVO> resultList = rows.stream().map(this::mapToFileVO).toList();
+
+        return PageResult.of((long) listDTO.getPageNum(), (long) listDTO.getPageSize(), total, resultList);
+    }
+
+    /**
+     * 带过滤条件的文件查询（文件类型/关键词）
+     */
+    private PageResult<FileVO> listFilesFiltered(Long userId, FileListDTO listDTO) {
         LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(FileInfo::getUserId, userId)
                 .eq(FileInfo::getDeleted, 0)
@@ -103,25 +121,55 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         Page<FileInfo> page = new Page<>(listDTO.getPageNum(), listDTO.getPageSize());
         Page<FileInfo> result = baseMapper.selectPage(page, wrapper);
 
-        // 3. 合并结果（文件夹在前，文件在后）
         List<FileVO> fileVoList = result.getRecords().stream().map(this::toVO).toList();
-        resultList.addAll(fileVoList);
+        return PageResult.of(result.getCurrent(), result.getSize(), result.getTotal(), fileVoList);
+    }
 
-        long total = totalFolders + result.getTotal();
-        return PageResult.of(result.getCurrent(), result.getSize(), total, resultList);
+    /**
+     * 将 Map 转换为 FileVO（用于联合查询结果）
+     */
+    private FileVO mapToFileVO(java.util.Map<String, Object> row) {
+        FileVO vo = new FileVO();
+        vo.setId(((Number) row.get("id")).longValue());
+        vo.setFileName((String) row.get("file_name"));
+        vo.setFileSize(((Number) row.get("file_size")).longValue());
+        vo.setFileSizeStr("folder".equals(row.get("file_type")) ? "-" : SpaceVO.formatSize(vo.getFileSize()));
+        vo.setFileType((String) row.get("file_type"));
+        vo.setFileExt((String) row.get("file_ext"));
+        vo.setThumbnailPath((String) row.get("thumbnail_path"));
+        Object isVectorized = row.get("is_vectorized");
+        vo.setIsVectorized(isVectorized != null && ((Number) isVectorized).intValue() == 1);
+        vo.setFolderId(((Number) row.get("folder_id")).longValue());
+        // 处理时间类型（SQL返回Timestamp需要转换）
+        vo.setCreateTime(convertToLocalDateTime(row.get("create_time")));
+        vo.setUpdateTime(convertToLocalDateTime(row.get("update_time")));
+        return vo;
+    }
+
+    /**
+     * 将数据库时间对象转换为 LocalDateTime
+     */
+    private LocalDateTime convertToLocalDateTime(Object timeObj) {
+        if (timeObj == null)
+            return null;
+        if (timeObj instanceof LocalDateTime ldt)
+            return ldt;
+        if (timeObj instanceof java.sql.Timestamp ts)
+            return ts.toLocalDateTime();
+        return null;
     }
 
     /**
      * 将 FolderVO 转换为 FileVO（用于统一列表显示）
+     * 注意：为了性能，文件夹大小不在列表中计算（参照百度/夸克网盘模式）
      */
     private FileVO folderToFileVO(FolderVO folder, Long userId) {
         FileVO vo = new FileVO();
         vo.setId(folder.getId());
         vo.setFileName(folder.getFolderName());
-        // 计算文件夹大小
-        Long folderSize = calculateFolderSize(userId, folder.getId());
-        vo.setFileSize(folderSize);
-        vo.setFileSizeStr(SpaceVO.formatSize(folderSize));
+        // 文件夹大小设为0，前端显示为"-"（避免递归查询性能问题）
+        vo.setFileSize(0L);
+        vo.setFileSizeStr("-");
         vo.setFileType("folder");
         vo.setFileExt("");
         vo.setThumbnailPath(null);
@@ -134,19 +182,15 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
 
     @Override
     public Long calculateFolderSize(Long userId, Long folderId) {
-        // 1. 计算当前文件夹下直接文件的大小
-        Long directFileSize = baseMapper.sumFileSizeByFolderId(userId, folderId);
-
-        // 2. 递归计算子文件夹的大小
-        Long subFolderSize = 0L;
-        if (folderService != null) {
-            List<FolderVO> subFolders = folderService.getChildren(userId, folderId);
-            for (FolderVO subFolder : subFolders) {
-                subFolderSize += calculateFolderSize(userId, subFolder.getId());
+        // 使用 PostgreSQL 递归 CTE 一次性计算所有子文件夹的文件大小
+        java.util.Map<String, Object> result = baseMapper.sumFileSizeRecursive(userId, folderId);
+        if (result != null) {
+            Object totalSizeObj = result.get("totalsize");
+            if (totalSizeObj instanceof Number) {
+                return ((Number) totalSizeObj).longValue();
             }
         }
-
-        return directFileSize + subFolderSize;
+        return 0L;
     }
 
     @Override
@@ -495,14 +539,14 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         userService.updateUsedSpace(userId, file.getSize());
 
         long endTime = System.currentTimeMillis();
-        log.info("文件上传成功: userId={}, fileName={}, size={}, 总耗时={}ms", userId, originalFilename, file.getSize(), endTime - startTime);
+        log.info("文件上传成功: userId={}, fileName={}, size={}, 总耗时={}ms", userId, originalFilename, file.getSize(),
+                endTime - startTime);
 
         // 如果文件类型支持向量化，异步触发向量化
         if (aiService.isFileVectorizable(fileExt)) {
             aiService.vectorizeDocumentAsync(userId, newFile.getId());
             log.info("已触发异步向量化: fileId={}, fileExt={}", newFile.getId(), fileExt);
         }
-
 
         return UploadResultVO.normalUpload(newFile.getId(), originalFilename, file.getSize(), fileMd5);
     }

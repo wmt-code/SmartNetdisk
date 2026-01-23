@@ -7,6 +7,8 @@ import com.wmt.smartnetdisk.dto.request.CreateShareDTO;
 import com.wmt.smartnetdisk.entity.Share;
 import com.wmt.smartnetdisk.vo.ShareVO;
 
+import java.util.List;
+
 /**
  * 分享服务接口
  *
@@ -16,7 +18,7 @@ import com.wmt.smartnetdisk.vo.ShareVO;
 public interface IShareService extends IService<Share> {
 
     /**
-     * 创建分享
+     * 创建分享（支持单文件、目录、批量分享）
      *
      * @param userId    用户ID
      * @param createDTO 创建请求
@@ -84,6 +86,46 @@ public interface IShareService extends IService<Share> {
      * @param response  HTTP响应对象
      */
     void downloadShareStream(String shareCode, String password, jakarta.servlet.http.HttpServletResponse response);
+
+    /**
+     * 获取分享项列表（批量/目录分享时使用）
+     *
+     * @param shareCode 分享码
+     * @param password  提取码（如果有的话）
+     * @return 分享项列表
+     */
+    List<ShareVO.ShareItemVO> getShareItems(String shareCode, String password);
+
+    /**
+     * 浏览分享文件夹内容（支持进入子文件夹）
+     *
+     * @param shareCode 分享码
+     * @param password  提取码（如果有的话）
+     * @param folderId  要浏览的文件夹ID（0表示根目录）
+     * @return 文件夹内容列表
+     */
+    List<ShareVO.ShareItemVO> browseFolderContents(String shareCode, String password, Long folderId);
+
+    /**
+     * 获取分享中指定文件的下载链接
+     *
+     * @param shareCode 分享码
+     * @param password  提取码（如果有的话）
+     * @param fileId    文件ID
+     * @return 下载 URL
+     */
+    String getFileDownloadUrl(String shareCode, String password, Long fileId);
+
+    /**
+     * 流式下载分享中的指定文件
+     *
+     * @param shareCode 分享码
+     * @param password  提取码（如果有的话）
+     * @param fileId    文件ID
+     * @param response  HTTP响应对象
+     */
+    void downloadFileStream(String shareCode, String password, Long fileId,
+            jakarta.servlet.http.HttpServletResponse response);
 
     /**
      * 将分享实体转换为视图对象

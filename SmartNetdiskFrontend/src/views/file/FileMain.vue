@@ -43,6 +43,18 @@
 
         <el-divider direction="vertical" />
 
+        <!-- 批量分享按钮 -->
+        <el-button 
+          v-if="selectedFiles.length > 0"
+          type="success"
+          @click="handleBatchShare"
+        >
+          <el-icon><Share /></el-icon>
+          分享 ({{ selectedFiles.length }})
+        </el-button>
+
+        <el-divider direction="vertical" />
+
         <!-- 视图切换 -->
         <el-radio-group v-model="viewMode" size="small">
           <el-radio-button value="list">
@@ -195,12 +207,10 @@
       </div>
     </el-dialog>
 
-    <!-- 分享对话框 -->
-    <ShareDialog
+    <!-- 分享对话框（支持单文件/文件夹/批量） -->
+    <ShareBatchDialog
       v-model="shareDialogVisible"
-      :file-id="shareTargetFile?.id || 0"
-      :file-name="shareTargetFile?.fileName || ''"
-      :file-size-str="shareTargetFile?.fileSizeStr"
+      :selected-items="shareSelectedItems"
       @success="handleShareSuccess"
     />
   </div>
@@ -214,7 +224,7 @@ import {
   Download, Share, Delete, Picture, VideoPlay, Headset, FolderOpened,
   Loading, Edit, RefreshLeft
 } from '@element-plus/icons-vue'
-import ShareDialog from '@/components/ShareDialog.vue'
+import ShareBatchDialog from '@/components/ShareBatchDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getFileList, uploadFile, deleteFile, renameFile, downloadFileStream,
@@ -468,14 +478,42 @@ const handlePreview = async (row: FileInfo) => {
 
 // 分享相关
 const shareDialogVisible = ref(false)
-const shareTargetFile = ref<FileInfo | null>(null)
+const shareSelectedItems = ref<{
+  type: 'file' | 'folder'
+  id: number
+  name: string
+  size: number
+  sizeStr: string
+  fileType?: string
+}[]>([])
 
+// 单文件/文件夹分享
 const handleShare = (row: FileInfo) => {
-  if (row.fileType === 'folder') {
-    ElMessage.warning('暂不支持分享文件夹')
+  shareSelectedItems.value = [{
+    type: row.fileType === 'folder' ? 'folder' : 'file',
+    id: row.id,
+    name: row.fileName,
+    size: row.fileSize,
+    sizeStr: row.fileSizeStr || '',
+    fileType: row.fileType
+  }]
+  shareDialogVisible.value = true
+}
+
+// 批量分享
+const handleBatchShare = () => {
+  if (selectedFiles.value.length === 0) {
+    ElMessage.warning('请先选择要分享的文件')
     return
   }
-  shareTargetFile.value = row
+  shareSelectedItems.value = selectedFiles.value.map(file => ({
+    type: file.fileType === 'folder' ? 'folder' : 'file',
+    id: file.id,
+    name: file.fileName,
+    size: file.fileSize,
+    sizeStr: file.fileSizeStr || '',
+    fileType: file.fileType
+  }))
   shareDialogVisible.value = true
 }
 

@@ -76,29 +76,102 @@
 
       <!-- 文件信息展示 -->
       <div v-else-if="fileInfo" class="file-section">
-        <div class="file-preview">
-          <div class="file-icon-wrapper">
-            <el-icon :size="48" color="#7C3AED"><Document /></el-icon>
-            <div class="file-type-badge">{{ fileInfo.fileType?.toUpperCase() || 'FILE' }}</div>
+        <!-- 单文件分享 -->
+        <template v-if="fileInfo.shareType === 0">
+          <div class="file-preview">
+            <div class="file-icon-wrapper">
+              <el-icon :size="48" color="#7C3AED"><Document /></el-icon>
+              <div class="file-type-badge">{{ fileInfo.fileType?.toUpperCase() || 'FILE' }}</div>
+            </div>
           </div>
-        </div>
-        <h2 class="file-name">{{ fileInfo.fileName }}</h2>
-        <div class="file-meta">
-          <span class="file-size">
-            <el-icon><Coin /></el-icon>
-            {{ fileInfo.fileSizeStr }}
-          </span>
-        </div>
-        <el-button
-          type="primary"
-          size="large"
-          class="download-btn"
-          :loading="downloading"
-          @click="handleDownload"
-        >
-          <el-icon v-if="!downloading"><Download /></el-icon>
-          {{ downloading ? '准备下载...' : '立即下载' }}
-        </el-button>
+          <h2 class="file-name">{{ fileInfo.fileName }}</h2>
+          <div class="file-meta">
+            <span class="file-size">
+              <el-icon><Coin /></el-icon>
+              {{ fileInfo.fileSizeStr }}
+            </span>
+          </div>
+          <el-button
+            type="primary"
+            size="large"
+            class="download-btn"
+            :loading="downloading"
+            @click="handleDownload"
+          >
+            <el-icon v-if="!downloading"><Download /></el-icon>
+            {{ downloading ? '准备下载...' : '立即下载' }}
+          </el-button>
+        </template>
+
+        <!-- 文件夹/批量分享 -->
+        <template v-else>
+          <div class="folder-header">
+            <div class="folder-icon">
+              <el-icon :size="32" color="#7C3AED"><Folder /></el-icon>
+            </div>
+            <div class="folder-info">
+              <h2>{{ fileInfo.folderName || fileInfo.shareTitle || '分享文件夹' }}</h2>
+              <span class="folder-meta">
+                {{ fileInfo.fileCount || 0 }} 个文件 · {{ fileInfo.fileSizeStr || '-' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 面包屑导航 -->
+          <div class="breadcrumb" v-if="folderPath.length > 0">
+            <span class="breadcrumb-item" @click="navigateToRoot">
+              <el-icon><HomeFilled /></el-icon>
+              根目录
+            </span>
+            <template v-for="(folder, index) in folderPath" :key="folder.id">
+              <el-icon class="separator"><ArrowRight /></el-icon>
+              <span 
+                class="breadcrumb-item" 
+                :class="{ 'current': index === folderPath.length - 1 }"
+                @click="navigateToFolder(folder.id, index)"
+              >
+                {{ folder.name }}
+              </span>
+            </template>
+          </div>
+
+          <!-- 文件列表 -->
+          <div class="file-list" v-loading="listLoading">
+            <div 
+              v-for="item in fileList" 
+              :key="item.itemType + '-' + (item.fileId || item.folderId)"
+              class="file-item"
+              @click="handleItemClick(item)"
+            >
+              <div class="item-icon">
+                <el-icon :size="24" :color="item.itemType === 1 ? '#F59E0B' : '#7C3AED'">
+                  <Folder v-if="item.itemType === 1" />
+                  <Document v-else />
+                </el-icon>
+              </div>
+              <div class="item-info">
+                <span class="item-name">{{ item.name }}</span>
+                <span class="item-size">{{ item.sizeStr || '-' }}</span>
+              </div>
+              <div class="item-actions">
+                <el-button 
+                  v-if="item.itemType === 0"
+                  type="primary"
+                  size="small"
+                  :loading="downloadingFileId === item.fileId"
+                  @click.stop="downloadFile(item.fileId!)"
+                >
+                  <el-icon><Download /></el-icon>
+                </el-button>
+                <el-icon v-else><ArrowRight /></el-icon>
+              </div>
+            </div>
+            <div v-if="fileList.length === 0 && !listLoading" class="empty-list">
+              <el-icon :size="48" color="#ccc"><FolderOpened /></el-icon>
+              <p>文件夹为空</p>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- 加载状态 -->
@@ -131,14 +204,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { 
   Lock, Unlock, Document, Download, CircleClose, HomeFilled,
-  Key, View, Hide, WarningFilled, InfoFilled, Coin
+  Key, View, Hide, WarningFilled, InfoFilled, Coin, Folder, ArrowRight, FolderOpened
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
+import { browseFolderContents, getFileDownloadUrl, type ShareItemInfo } from '@/api/share'
 
 const route = useRoute()
 
@@ -148,7 +222,7 @@ const needPassword = ref(false)
 const password = ref('')
 const errorMessage = ref('')
 
-// 新增：表单交互状态
+// 表单交互状态
 const showPassword = ref(false)
 const inputFocused = ref(false)
 const passwordError = ref(false)
@@ -156,11 +230,26 @@ const passwordErrorMsg = ref('')
 const shakeCard = ref(false)
 const verifiedPassword = ref('')  // 保存验证成功的密码，用于下载
 
+// 文件夹浏览相关
+const listLoading = ref(false)
+const fileList = ref<ShareItemInfo[]>([])
+const folderPath = ref<{id: number, name: string}[]>([])
+const downloadingFileId = ref<number | null>(null)
+const currentFolderId = ref<number>(0)
+
 interface ShareFileInfo {
-  fileName: string
-  fileSize: number
+  shareType?: number
+  fileName?: string
+  folderName?: string
+  shareTitle?: string
+  fileSize?: number
+  totalSize?: number
   fileSizeStr: string
-  fileType: string
+  fileType?: string
+  fileCount?: number
+  needPassword?: boolean
+  hasPassword?: boolean
+  folderId?: number
 }
 
 const fileInfo = ref<ShareFileInfo | null>(null)
@@ -183,12 +272,78 @@ async function fetchShareInfo() {
       fileInfo.value = res.data
     } else {
       fileInfo.value = res.data
+      // 如果是文件夹/批量分享，加载文件列表
+      if (fileInfo.value && fileInfo.value.shareType && fileInfo.value.shareType !== 0) {
+        await loadFileList()
+      }
     }
   } catch (error: unknown) {
     console.error('获取分享信息失败:', error)
     errorMessage.value = '分享不存在或已过期'
   } finally {
     loading.value = false
+  }
+}
+
+// 加载文件列表
+async function loadFileList(folderId?: number) {
+  const code = route.params.code as string
+  listLoading.value = true
+  try {
+    const items = await browseFolderContents(code, verifiedPassword.value || undefined, folderId)
+    fileList.value = items
+    currentFolderId.value = folderId || 0
+  } catch (error) {
+    console.error('加载文件列表失败:', error)
+    ElMessage.error('加载文件列表失败')
+  } finally {
+    listLoading.value = false
+  }
+}
+
+// 点击文件/文件夹
+function handleItemClick(item: ShareItemInfo) {
+  if (item.itemType === 1 && item.folderId) {
+    // 文件夹：进入子文件夹
+    folderPath.value.push({ id: item.folderId, name: item.name })
+    loadFileList(item.folderId)
+  }
+  // 文件：不做处理，点下载按钮
+}
+
+// 导航到根目录
+function navigateToRoot() {
+  folderPath.value = []
+  loadFileList(fileInfo.value?.folderId || 0)
+}
+
+// 导航到指定文件夹
+function navigateToFolder(folderId: number, index: number) {
+  folderPath.value = folderPath.value.slice(0, index + 1)
+  loadFileList(folderId)
+}
+
+// 下载指定文件
+async function downloadFile(fileId: number) {
+  const code = route.params.code as string
+  downloadingFileId.value = fileId
+  try {
+    const url = await getFileDownloadUrl(code, fileId, verifiedPassword.value || undefined)
+    // 创建隐藏的 a 标签触发下载
+    const link = document.createElement('a')
+    link.href = url
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    ElMessage.success('开始下载')
+  } catch (error) {
+    console.error('获取下载链接失败:', error)
+    ElMessage.error('下载失败')
+  } finally {
+    setTimeout(() => {
+      downloadingFileId.value = null
+    }, 500)
   }
 }
 
@@ -210,6 +365,10 @@ async function verifyPassword() {
     verifiedPassword.value = password.value  // 保存验证成功的密码
     fileInfo.value = res.data
     needPassword.value = false
+    // 如果是文件夹/批量分享，加载文件列表
+    if (fileInfo.value && fileInfo.value.shareType && fileInfo.value.shareType !== 0) {
+      await loadFileList()
+    }
   } catch (error: unknown) {
     console.error('验证失败:', error)
     passwordError.value = true
@@ -584,6 +743,141 @@ onMounted(() => {
     &:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
+    }
+  }
+
+  // 文件夹分享样式
+  .folder-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    text-align: left;
+
+    .folder-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .folder-info {
+      h2 {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1F2937;
+        margin: 0 0 4px 0;
+      }
+
+      .folder-meta {
+        font-size: 13px;
+        color: #6B7280;
+      }
+    }
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #F9FAFB;
+    border-radius: 10px;
+    flex-wrap: wrap;
+
+    .breadcrumb-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      color: #7C3AED;
+      cursor: pointer;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #5B21B6;
+      }
+
+      &.current {
+        color: #6B7280;
+        cursor: default;
+      }
+    }
+
+    .separator {
+      color: #D1D5DB;
+      font-size: 12px;
+    }
+  }
+
+  .file-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border-radius: 12px;
+    border: 1px solid #E5E7EB;
+    background: #FAFAFA;
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #F3F4F6;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &:hover {
+        background: #F3F4F6;
+      }
+
+      .item-icon {
+        flex-shrink: 0;
+      }
+
+      .item-info {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+
+        .item-name {
+          display: block;
+          font-size: 14px;
+          font-weight: 500;
+          color: #1F2937;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .item-size {
+          font-size: 12px;
+          color: #9CA3AF;
+        }
+      }
+
+      .item-actions {
+        flex-shrink: 0;
+        color: #D1D5DB;
+      }
+    }
+
+    .empty-list {
+      padding: 40px 20px;
+      text-align: center;
+      color: #9CA3AF;
+
+      p {
+        margin-top: 12px;
+        font-size: 14px;
+      }
     }
   }
 }

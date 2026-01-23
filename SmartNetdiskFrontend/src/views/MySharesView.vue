@@ -28,11 +28,21 @@
         style="width: 100%"
         class="shares-table"
       >
-        <el-table-column prop="fileName" label="文件名" min-width="250">
+        <el-table-column prop="fileName" label="分享内容" min-width="280">
           <template #default="{ row }">
             <div class="flex items-center gap-2">
-              <el-icon :size="20" color="#7C3AED"><Document /></el-icon>
-              <span class="font-medium">{{ row.fileName }}</span>
+              <el-icon :size="20" :color="getShareTypeColor(row.shareType)">
+                <component :is="getShareTypeIcon(row.shareType)" />
+              </el-icon>
+              <div class="file-info">
+                <span class="font-medium">{{ getShareDisplayName(row) }}</span>
+                <div class="share-meta">
+                  <el-tag size="small" :type="getShareTypeTagType(row.shareType)" class="type-tag">
+                    {{ formatShareType(row.shareType) }}
+                  </el-tag>
+                  <span v-if="row.fileCount > 1" class="file-count">{{ row.fileCount }} 个文件</span>
+                </div>
+              </div>
             </div>
           </template>
         </el-table-column>
@@ -109,9 +119,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Document, DocumentCopy, Loading } from '@element-plus/icons-vue'
+import { Document, DocumentCopy, Loading, FolderOpened, Folder } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getMyShares, cancelShare, generateShareLink, type ShareInfo } from '@/api/share'
+import { 
+  getMyShares, 
+  cancelShare, 
+  generateShareLink, 
+  formatShareType,
+  ShareType,
+  type ShareInfo 
+} from '@/api/share'
 
 // 分页
 const currentPage = ref(1)
@@ -198,6 +215,44 @@ function isExpired(time: string | null) {
   return new Date(time) < new Date()
 }
 
+// 获取分享显示名称
+function getShareDisplayName(row: ShareInfo) {
+  if (row.shareType === ShareType.FOLDER && row.folderName) {
+    return row.folderName
+  }
+  if (row.shareType === ShareType.BATCH && row.shareTitle) {
+    return row.shareTitle
+  }
+  return row.fileName || '未命名分享'
+}
+
+// 获取分享类型图标
+function getShareTypeIcon(shareType: number) {
+  switch (shareType) {
+    case ShareType.FOLDER: return FolderOpened
+    case ShareType.BATCH: return Folder
+    default: return Document
+  }
+}
+
+// 获取分享类型颜色
+function getShareTypeColor(shareType: number) {
+  switch (shareType) {
+    case ShareType.FOLDER: return '#F97316'
+    case ShareType.BATCH: return '#7C3AED'
+    default: return '#3B82F6'
+  }
+}
+
+// 获取分享类型标签类型
+function getShareTypeTagType(shareType: number): 'primary' | 'success' | 'warning' | 'danger' | 'info' {
+  switch (shareType) {
+    case ShareType.FOLDER: return 'warning'
+    case ShareType.BATCH: return 'primary'
+    default: return 'info'
+  }
+}
+
 onMounted(() => {
   loadShares()
 })
@@ -236,5 +291,26 @@ onMounted(() => {
 
 .shares-table :deep(.el-table__row:hover) {
   background-color: rgba(124, 58, 237, 0.05) !important;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.share-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.type-tag {
+  font-size: 11px;
+}
+
+.file-count {
+  font-size: 12px;
+  color: #9CA3AF;
 }
 </style>
