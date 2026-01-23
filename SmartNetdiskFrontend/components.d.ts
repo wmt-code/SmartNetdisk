@@ -49,6 +49,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     ShareBatchDialog: typeof import('./src/components/ShareBatchDialog.vue')['default']
     ShareDialog: typeof import('./src/components/ShareDialog.vue')['default']
+    UppyUploader: typeof import('./src/components/UppyUploader.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

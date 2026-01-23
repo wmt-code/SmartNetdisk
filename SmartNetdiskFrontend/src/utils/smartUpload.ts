@@ -183,8 +183,8 @@ async function uploadFileWithChunks(
     let uploadedBytes = uploadedChunkSet.size * DEFAULT_CHUNK_SIZE
     let completedChunks = uploadedChunkSet.size
 
-    // 并发上传分片（根据服务器性能调整，4核服务器建议 5-6 个并发）
-    const CONCURRENT_LIMIT = 5
+    // 并发上传分片（8个并发，平衡速度和服务器压力）
+    const CONCURRENT_LIMIT = 8
     const pendingChunks: number[] = []
 
     for (let i = 0; i < totalChunks; i++) {

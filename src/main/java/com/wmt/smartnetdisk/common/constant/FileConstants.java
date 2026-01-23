@@ -16,9 +16,9 @@ public final class FileConstants {
 
     // ==================== 分片上传配置 ====================
     /**
-     * 默认分片大小：5MB
+     * 默认分片大小：20MB
      */
-    public static final long DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024L;
+    public static final long DEFAULT_CHUNK_SIZE = 20 * 1024 * 1024L;
 
     /**
      * 最小分片大小：1MB
@@ -26,9 +26,9 @@ public final class FileConstants {
     public static final long MIN_CHUNK_SIZE = 1024 * 1024L;
 
     /**
-     * 最大分片大小：10MB
+     * 最大分片大小：50MB
      */
-    public static final long MAX_CHUNK_SIZE = 10 * 1024 * 1024L;
+    public static final long MAX_CHUNK_SIZE = 50 * 1024 * 1024L;
 
     // ==================== 文件大小限制 ====================
     /**

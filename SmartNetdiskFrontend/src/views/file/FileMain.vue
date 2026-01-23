@@ -221,21 +221,20 @@
       </template>
     </el-dialog>
 
-    <!-- 隐藏的上传 input -->
-    <input ref="fileInput" type="file" multiple hidden @change="handleFileChange" />
-    <input ref="folderInput" type="file" webkitdirectory hidden @change="handleFolderChange" />
-
-    <!-- 上传进度对话框 -->
-    <el-dialog v-model="uploadDialogVisible" title="上传文件" width="500px" :close-on-click-modal="false">
-      <div class="upload-list">
-        <div v-for="(item, index) in uploadQueue" :key="index" class="upload-item mb-4">
-          <div class="flex justify-between mb-1">
-            <span class="text-sm truncate" style="max-width: 300px;">{{ item.name }}</span>
-            <span class="text-xs text-gray-400">{{ item.status }}</span>
-          </div>
-          <el-progress :percentage="item.progress" :status="item.error ? 'exception' : undefined" />
-        </div>
-      </div>
+    <!-- Uppy 上传对话框 -->
+    <el-dialog 
+      v-model="uploadDialogVisible" 
+      title="上传文件" 
+      width="700px" 
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <UppyUploader 
+        :folder-id="currentFolderId" 
+        :visible="uploadDialogVisible"
+        @close="handleUploadClose"
+        @success="handleUploadSuccess"
+      />
     </el-dialog>
 
     <!-- 分享对话框（支持单文件/文件夹/批量） -->
@@ -310,7 +309,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import {
   HomeFilled, FolderAdd, Upload, Document, Folder, List, Grid,
   Download, Share, Delete, Picture, VideoPlay, Headset, FolderOpened,
@@ -318,6 +317,7 @@ import {
 } from '@element-plus/icons-vue'
 import ShareBatchDialog from '@/components/ShareBatchDialog.vue'
 import FolderSelectDialog from '@/components/FolderSelectDialog.vue'
+import UppyUploader from '@/components/UppyUploader.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getFileList, deleteFile, renameFile, downloadFileStream,
@@ -325,13 +325,11 @@ import {
   type FileInfo
 } from '@/api/file'
 import { vectorizeFile } from '@/api/ai'
-import { smartUploadFile } from '@/utils/smartUpload'
 
 
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
-const router = useRouter()
 const userStore = useUserStore()
 
 // 视图模式
@@ -360,10 +358,7 @@ const renameNewName = ref('')
 const renameTargetFile = ref<FileInfo | null>(null)
 
 // 上传相关
-const fileInput = ref<HTMLInputElement | null>(null)
-const folderInput = ref<HTMLInputElement | null>(null)
 const uploadDialogVisible = ref(false)
-const uploadQueue = ref<{ name: string; progress: number; status: string; error: boolean }[]>([])
 
 // 选中的文件
 const selectedFiles = ref<FileInfo[]>([])
@@ -524,178 +519,26 @@ const handleContextMenuAction = (action: string) => {
 }
 
 const triggerUpload = () => {
-  fileInput.value?.click()
+  uploadDialogVisible.value = true
 }
 
 const triggerFolderUpload = () => {
-  folderInput.value?.click()
-}
-
-const handleFileChange = async (e: Event) => {
-  const target = e.target as HTMLInputElement
-  const files = target.files
-  if (!files || files.length === 0) return
-
   uploadDialogVisible.value = true
-  uploadQueue.value = Array.from(files).map(f => ({
-    name: f.name,
-    progress: 0,
-    status: '等待上传',
-    error: false
-  }))
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]
-    const queueItem = uploadQueue.value[i]
-    if (!queueItem || !file) continue
-
-    queueItem.status = '准备上传...'
-
-    try {
-      await smartUploadFile(file, currentFolderId.value, (progress) => {
-        const item = uploadQueue.value[i]
-        if (item) {
-          item.progress = progress.percent
-          item.status = progress.stageText
-        }
-      })
-      queueItem.status = '上传成功'
-      queueItem.progress = 100
-      userStore.updateUsedSpace(file.size)
-    } catch (error) {
-      console.error('上传失败:', error)
-      queueItem.status = '上传失败'
-      queueItem.error = true
-    }
-  }
-
-  // 刷新列表
-  await loadFileList()
-  
-  // 重置 input
-  target.value = ''
-  
-  // 延迟关闭对话框
-  setTimeout(() => {
-    uploadDialogVisible.value = false
-    uploadQueue.value = []
-  }, 1500)
 }
 
-const handleFolderChange = async (e: Event) => {
-  const target = e.target as HTMLInputElement
-  const files = target.files
-  if (!files || files.length === 0) return
-
-  // 1. 解析文件路径结构
-  const fileArray = Array.from(files)
-  const totalFiles = fileArray.length
-  
-  if (totalFiles > 100) {
-    ElMessage.warning(`文件夹包含 ${totalFiles} 个文件，上传可能需要较长时间`)
-  }
-
-  uploadDialogVisible.value = true
-  uploadQueue.value = []
-
-  // 2. 递归创建文件夹并上传
-  // 注意：webkitdirectory 返回的文件包含 webkitRelativePath 属性，如 "folder/sub/file.txt"
-  // 我们需要解析这些路径并在后端创建对应的文件夹结构
-  
-  // 缓存已创建的文件夹 ID: "path/to/folder" -> folderId
-  const folderCache: Record<string, number> = {
-    '': currentFolderId.value // 根路径对应当前文件夹
-  }
-
-  // 辅助函数：确保文件夹存在
-  async function ensureFolder(path: string): Promise<number> {
-    if (folderCache[path] !== undefined) {
-      return folderCache[path]
-    }
-
-    const parts = path.split('/')
-    let currentPath = ''
-    let parentId = currentFolderId.value
-
-    for (const part of parts) {
-      const parentPath = currentPath
-      // 正确处理路径拼接，避免双斜杠
-      currentPath = currentPath ? `${currentPath}/${part}` : part
-
-      if (folderCache[currentPath] !== undefined) {
-        parentId = folderCache[currentPath] as number
-        continue
-      }
-
-      // 创建文件夹
-      try {
-        const folder = await createFolder(part, parentId)
-        folderCache[currentPath] = folder.id
-        parentId = folder.id
-      } catch (error) {
-        console.error(`创建文件夹失败: ${currentPath}`, error)
-         throw error
-      }
-    }
-    return parentId
-  }
-
-  // 3. 处理每个文件
-  for (const file of fileArray) {
-    const relativePath = file.webkitRelativePath
-    const pathParts = relativePath.split('/')
-    const fileName = pathParts.pop() // 最后一部分是文件名
-    const folderPath = pathParts.join('/') // 剩余部分是文件夹路径
-
-    // 添加到队列
-    const queueItem = {
-      name: relativePath, // 显示完整相对路径
-      progress: 0,
-      status: '等待上传',
-      error: false
-    }
-    uploadQueue.value.push(queueItem)
-    const queueIndex = uploadQueue.value.length - 1
-
-    try {
-      queueItem.status = '准备中...'
-      // 确保父文件夹存在
-      const folderId = await ensureFolder(folderPath)
-
-      // 上传文件
-      queueItem.status = '上传中...'
-      await smartUploadFile(file, folderId, (progress) => {
-        if (uploadQueue.value[queueIndex]) {
-          uploadQueue.value[queueIndex].progress = progress.percent
-          uploadQueue.value[queueIndex].status = progress.stageText
-        }
-      })
-
-      queueItem.status = '上传成功'
-      queueItem.progress = 100
-      userStore.updateUsedSpace(file.size)
-    } catch (error) {
-      console.error(`上传失败: ${relativePath}`, error)
-      queueItem.status = '上传失败'
-      queueItem.error = true
-    }
-  }
-
-  // 刷新列表
-  await loadFileList()
-  
-  // 重置 input
-  target.value = ''
-  
-  // 延迟关闭对话框（如果全部成功）
-  const hasError = uploadQueue.value.some(item => item.error)
-  if (!hasError) {
-    setTimeout(() => {
-      uploadDialogVisible.value = false
-      uploadQueue.value = []
-    }, 2000)
-  }
+// Uppy 上传关闭处理
+const handleUploadClose = () => {
+  uploadDialogVisible.value = false
+  loadFileList()
 }
+
+// Uppy 上传成功处理
+const handleUploadSuccess = (files: { id: number; name: string }[]) => {
+  ElMessage.success(`成功上传 ${files.length} 个文件`)
+  loadFileList()
+}
+
+
 
 const handleCreateFolder = async () => {
   if (!newFolderName.value.trim()) {
@@ -720,16 +563,6 @@ const handleCreateFolder = async () => {
 const handleDownload = (row: FileInfo) => {
   // 直接调用下载，浏览器会根据响应头处理文件名
   downloadFileStream(row.id)
-}
-
-const handlePreview = async (row: FileInfo) => {
-  try {
-    const { getPreviewUrl } = await import('@/api/file')
-    const url = await getPreviewUrl(row.id)
-    window.open(url, '_blank')
-  } catch (error) {
-    console.error('获取预览链接失败:', error)
-  }
 }
 
 // 分享相关

@@ -4,14 +4,14 @@ import SparkMD5 from 'spark-md5'
  * 文件上传相关工具函数
  */
 
-// 默认分片大小：10MB（减少请求次数，提高上传效率）
-export const DEFAULT_CHUNK_SIZE = 10 * 1024 * 1024
+// 默认分片大小：20MB（减少请求次数，提高上传效率）
+export const DEFAULT_CHUNK_SIZE = 20 * 1024 * 1024
 
-// 大文件阈值：100MB，超过此大小使用分片上传
-export const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024
+// 大文件阈值：50MB，超过此大小使用分片上传
+export const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024
 
 /**
- * 计算文件 MD5
+ * 计算文件 MD5（使用 Web Worker 风格的分片处理）
  * @param file 文件对象
  * @param onProgress 进度回调 (0-100)
  * @returns MD5 字符串
@@ -21,7 +21,7 @@ export async function calculateFileMD5(
     onProgress?: (percent: number) => void
 ): Promise<string> {
     return new Promise((resolve, reject) => {
-        const chunkSize = 2 * 1024 * 1024 // 2MB per chunk for MD5 calculation
+        const chunkSize = 10 * 1024 * 1024 // 10MB per chunk for faster MD5 calculation
         const chunks = Math.ceil(file.size / chunkSize)
         let currentChunk = 0
         const spark = new SparkMD5.ArrayBuffer()
