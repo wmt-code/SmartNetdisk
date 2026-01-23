@@ -347,8 +347,8 @@ const handleRowDblClick = (row: FileInfo) => {
     currentPage.value = 1
     loadFileList()
   } else {
-    // 预览文件
-    handlePreview(row)
+    // 下载文件（使用流式下载确保文件名正确）
+    handleDownload(row)
   }
 }
 
