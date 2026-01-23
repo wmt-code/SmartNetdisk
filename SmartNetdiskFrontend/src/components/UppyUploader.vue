@@ -9,6 +9,7 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import Uppy from '@uppy/core'
 import Dashboard from '@uppy/dashboard'
+import ThumbnailGenerator from '@uppy/thumbnail-generator'
 import { SmartUploadPlugin } from '@/utils/uppySmartUpload'
 import { useUserStore } from '@/stores/user'
 
@@ -43,20 +44,31 @@ function initUppy() {
     },
   })
 
-  // 安装智能上传插件
+  // 安装智能上传插件（手动创建并调用 install 方法来注册预处理器和上传器）
   smartUploadPlugin = new SmartUploadPlugin(uppy, { folderId: props.folderId })
+  smartUploadPlugin.install()
+
+  // 安装缩略图生成器（用于图片/视频预览）
+  uppy.use(ThumbnailGenerator, {
+    thumbnailWidth: 280,
+    thumbnailHeight: 280,
+    thumbnailType: 'image/jpeg',
+    waitForThumbnailsBeforeUpload: false
+  })
 
   // 安装 Dashboard
   uppy.use(Dashboard, {
     inline: true,
     target: uppyContainer.value,
     width: '100%',
-    height: 400,
-    hideProgressDetails: false,
+    height: 450,
+    hideProgressDetails: false, // 启用详细进度显示（上传速度、剩余时间）
     proudlyDisplayPoweredByUppy: false,
     note: '支持拖拽上传、秒传、断点续传，单文件最大 10GB',
     hideUploadButton: false,
     showRemoveButtonAfterComplete: true,
+    singleFileFullScreen: true, // 单文件时全屏预览
+    showSelectedFiles: true, // 显示已选文件列表
     doneButtonHandler: () => {
       emit('close')
     },
@@ -94,6 +106,14 @@ function initUppy() {
         xFilesSelected: { 0: '已选择文件', 1: '已选择 %{smart_count} 个文件' },
         uploadingXFiles: { 0: '正在上传文件', 1: '正在上传 %{smart_count} 个文件' },
         processingXFiles: { 0: '正在处理文件', 1: '正在处理 %{smart_count} 个文件' },
+        // 进度详情
+        uploading: '正在上传',
+        complete: '完成',
+        uploadFailed: '上传失败',
+        paused: '已暂停',
+        retry: '重试',
+        // 文件信息
+        xMoreFilesAdded: { 0: '又添加了 %{smart_count} 个文件', 1: '又添加了 %{smart_count} 个文件' },
         // 其他
         addMore: '添加更多',
         addMoreFiles: '添加更多文件',

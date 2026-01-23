@@ -222,15 +222,16 @@
     </el-dialog>
 
     <!-- Uppy 上传对话框 -->
-    <el-dialog 
-      v-model="uploadDialogVisible" 
-      title="上传文件" 
-      width="700px" 
+    <el-dialog
+      v-model="uploadDialogVisible"
+      title="上传文件"
+      width="700px"
       :close-on-click-modal="false"
       destroy-on-close
+      @closed="handleUploadClose"
     >
-      <UppyUploader 
-        :folder-id="currentFolderId" 
+      <UppyUploader
+        :folder-id="currentFolderId"
         :visible="uploadDialogVisible"
         @close="handleUploadClose"
         @success="handleUploadSuccess"

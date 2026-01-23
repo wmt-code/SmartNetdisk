@@ -176,12 +176,51 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
         const uploadedChunks = new Set(meta.uploadedChunks || [])
 
         const totalChunks = Math.ceil(fileData.size / DEFAULT_CHUNK_SIZE)
-        let uploadedBytes = uploadedChunks.size * DEFAULT_CHUNK_SIZE
-        let completedChunks = uploadedChunks.size
+
+        // 1. 正确计算已上传的初始字节数
+        let initialUploadedBytes = 0
+        for (const idx of uploadedChunks) {
+            // 过滤无效的分片索引（防止后端返回脏数据导致进度计算溢出）
+            if (idx >= totalChunks) continue
+
+            // 如果是最后一个分片，大小可能不满 DEFAULT_CHUNK_SIZE
+            if (idx === totalChunks - 1) {
+                initialUploadedBytes += (fileData.size % DEFAULT_CHUNK_SIZE) || DEFAULT_CHUNK_SIZE
+            } else {
+                initialUploadedBytes += DEFAULT_CHUNK_SIZE
+            }
+        }
+
+        let uploadedBytes = initialUploadedBytes
         const uploadStarted = Date.now()
 
+        // 用于追踪每个正在上传的分片的进度
+        const chunkProgressMap = new Map<number, number>()
+
+        // 更新总进度的函数
+        const updateProgress = () => {
+            let currentBytes = initialUploadedBytes
+            // 累加所有正在上传的分片的已上传字节数
+            for (const bytes of chunkProgressMap.values()) {
+                currentBytes += bytes
+            }
+            // 确保不倒退且不超过总大小
+            if (currentBytes > uploadedBytes) {
+                uploadedBytes = currentBytes
+            }
+            if (uploadedBytes > fileData.size) {
+                uploadedBytes = fileData.size
+            }
+
+            this.uppy.emit('upload-progress', file, {
+                uploadStarted,
+                bytesUploaded: uploadedBytes,
+                bytesTotal: fileData.size
+            })
+        }
+
         // 并发上传分片
-        const CONCURRENT_LIMIT = 8
+        const CONCURRENT_LIMIT = 4 // 降低并发数以避免浏览器卡顿，同时配合详细进度
         const pendingChunks: number[] = []
 
         for (let i = 0; i < totalChunks; i++) {
@@ -198,23 +237,36 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
                 const start = chunkIndex * DEFAULT_CHUNK_SIZE
                 const end = Math.min(start + DEFAULT_CHUNK_SIZE, fileData.size)
                 const chunk = fileData.slice(start, end)
+                const currentChunkSize = chunk.size
+
+                // 初始化该分片的进度为 0
+                chunkProgressMap.set(chunkIndex, 0)
 
                 await uploadChunk(chunk, {
                     fileMd5,
                     chunkIndex,
                     totalChunks,
-                    chunkSize: chunk.size
+                    chunkSize: currentChunkSize
+                }, 3, (percent) => {
+                    // 更新该分片的进度
+                    const loaded = Math.floor((currentChunkSize * percent) / 100)
+                    chunkProgressMap.set(chunkIndex, loaded)
+                    updateProgress()
                 })
 
-                uploadedBytes += chunk.size
-                completedChunks++
-
-                this.uppy.emit('upload-progress', file, {
-                    uploadStarted,
-                    bytesUploaded: uploadedBytes,
-                    bytesTotal: fileData.size
-                })
+                // 上传完成，该分片贡献变为固定值（防止计算误差），并移出 map 或设为满值
+                // 这里我们选择从 map 中移除，并加到 initialUploadedBytes 中，或者简单地保留在 map 中设为满值
+                //为了简单起见，我们更新 map 为满值，直到一批结束或者一直保留?
+                // 更好的做法：当分片完成，将其大小加到 initialUploadedBytes (或类似的累加器)，并从 map 删除，防止 map 过大?
+                // 但为了逻辑简单，本循环内 map 仅存当前批次的 context 也可以，
+                // 不过 batch 是串行的吗？外层 for 是串行的。
+                // 稳妥起见，分片完成后，我们将其标记为 100% (即 full size)
+                chunkProgressMap.set(chunkIndex, currentChunkSize)
+                updateProgress()
             }))
+
+            // 批次完成后，清理 map，将这批的大小永久加到 baseline?
+            // 其实不用太复杂，map 存了就存了，totalChunks 不会太大（10GB / 20MB = 500 个 entry，Map 毫无压力）
         }
 
         // 合并分片

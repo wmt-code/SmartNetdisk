@@ -145,7 +145,8 @@ export async function uploadChunk(
         totalChunks: number
         chunkSize: number
     },
-    maxRetries: number = 3
+    maxRetries: number = 3,
+    onProgress?: (percent: number) => void
 ): Promise<void> {
     const formData = new FormData()
     formData.append('file', chunk)
@@ -161,7 +162,13 @@ export async function uploadChunk(
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 },
-                timeout: 0 // 禁用超时，分片上传可能需要较长时间
+                timeout: 0, // 禁用超时，分片上传可能需要较长时间
+                onUploadProgress: (progressEvent) => {
+                    if (onProgress && progressEvent.total) {
+                        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+                        onProgress(percent)
+                    }
+                }
             })
             return // 上传成功，直接返回
         } catch (error) {
