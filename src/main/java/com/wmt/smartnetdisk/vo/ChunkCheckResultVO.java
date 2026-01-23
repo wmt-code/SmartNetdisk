@@ -18,14 +18,9 @@ import java.util.List;
 public class ChunkCheckResultVO {
 
     /**
-     * 是否需要上传（false 表示秒传成功）
+     * 是否秒传成功（true 表示秒传成功，无需上传）
      */
-    private Boolean needUpload;
-
-    /**
-     * 已上传的分片索引列表（用于断点续传）
-     */
-    private List<Integer> uploadedChunks;
+    private Boolean fastUploaded;
 
     /**
      * 秒传成功时的文件信息
@@ -33,11 +28,16 @@ public class ChunkCheckResultVO {
     private UploadResultVO uploadResult;
 
     /**
+     * 已上传的分片索引列表（用于断点续传）
+     */
+    private List<Integer> uploadedChunks;
+
+    /**
      * 创建需要上传的结果
      */
     public static ChunkCheckResultVO needUpload(List<Integer> uploadedChunks) {
         ChunkCheckResultVO vo = new ChunkCheckResultVO();
-        vo.setNeedUpload(true);
+        vo.setFastUploaded(false);
         vo.setUploadedChunks(uploadedChunks);
         return vo;
     }
@@ -47,7 +47,7 @@ public class ChunkCheckResultVO {
      */
     public static ChunkCheckResultVO fastUploaded(UploadResultVO uploadResult) {
         ChunkCheckResultVO vo = new ChunkCheckResultVO();
-        vo.setNeedUpload(false);
+        vo.setFastUploaded(true);
         vo.setUploadResult(uploadResult);
         return vo;
     }

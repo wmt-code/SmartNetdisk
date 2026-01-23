@@ -51,6 +51,22 @@ public interface IFolderService extends IService<Folder> {
     void deleteFolder(Long userId, Long folderId);
 
     /**
+     * 恢复文件夹
+     *
+     * @param userId   用户ID
+     * @param folderId 文件夹ID
+     */
+    void restoreFolder(Long userId, Long folderId);
+
+    /**
+     * 彻底删除文件夹
+     *
+     * @param userId   用户ID
+     * @param folderId 文件夹ID
+     */
+    void permanentDeleteFolder(Long userId, Long folderId);
+
+    /**
      * 获取文件夹树
      *
      * @param userId 用户ID

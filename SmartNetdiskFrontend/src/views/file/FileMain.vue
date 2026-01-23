@@ -3,8 +3,8 @@
     <!-- 工具栏 -->
     <div class="toolbar flex items-center justify-between p-4 border-b border-gray-100">
       <div class="left flex items-center gap-4">
-        <!-- 面包屑导航 -->
-        <el-breadcrumb separator="/">
+        <!-- 面包屑导航 - 非回收站 -->
+        <el-breadcrumb v-if="!isRecycleBin" separator="/">
           <el-breadcrumb-item>
             <span class="cursor-pointer" @click="navigateToRoot">
               <el-icon><HomeFilled /></el-icon>
@@ -14,17 +14,23 @@
             <span class="cursor-pointer" @click="navigateToFolder(segment.id, index)">{{ segment.name }}</span>
           </el-breadcrumb-item>
         </el-breadcrumb>
+
+        <!-- 回收站标题 -->
+        <div v-if="isRecycleBin" class="flex items-center gap-2">
+          <el-icon :size="20"><Delete /></el-icon>
+          <span class="font-medium text-lg">回收站</span>
+        </div>
       </div>
-      
+
       <div class="right flex items-center gap-2">
         <!-- 新建文件夹 -->
-        <el-button @click="showNewFolderDialog = true">
+        <el-button v-if="!isRecycleBin" @click="showNewFolderDialog = true">
           <el-icon><FolderAdd /></el-icon>
           新建文件夹
         </el-button>
-        
+
         <!-- 上传按钮 -->
-        <el-dropdown split-button type="primary" @click="triggerUpload">
+        <el-dropdown v-if="!isRecycleBin" split-button type="primary" @click="triggerUpload">
           <el-icon><Upload /></el-icon>
           上传文件
           <template #dropdown>
@@ -41,17 +47,40 @@
           </template>
         </el-dropdown>
 
-        <el-divider direction="vertical" />
+        <el-divider v-if="!isRecycleBin" direction="vertical" />
 
         <!-- 批量分享按钮 -->
-        <el-button 
-          v-if="selectedFiles.length > 0"
+        <el-button
+          v-if="selectedFiles.length > 0 && !isRecycleBin"
           type="success"
           @click="handleBatchShare"
         >
           <el-icon><Share /></el-icon>
           分享 ({{ selectedFiles.length }})
         </el-button>
+
+        <!-- 批量操作按钮组 - 普通文件列表 -->
+        <el-button-group v-if="selectedFiles.length > 0 && !isRecycleBin" class="ml-2">
+          <el-button @click="handleBatchMove">
+            移动
+          </el-button>
+          <el-button @click="handleBatchCopy">
+            复制
+          </el-button>
+          <el-button type="danger" @click="handleBatchDelete">
+            删除
+          </el-button>
+        </el-button-group>
+
+        <!-- 批量操作按钮组 - 回收站 -->
+        <el-button-group v-if="selectedFiles.length > 0 && isRecycleBin" class="ml-2">
+          <el-button type="primary" @click="handleBatchRestore">
+            恢复 ({{ selectedFiles.length }})
+          </el-button>
+          <el-button type="danger" @click="handleBatchPermanentDelete">
+            彻底删除
+          </el-button>
+        </el-button-group>
 
         <el-divider direction="vertical" />
 
@@ -108,7 +137,7 @@
             {{ formatTime(row.updateTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="isRecycleBin ? 140 : 180" fixed="right">
+        <el-table-column label="操作" :width="isRecycleBin ? 200 : 180" fixed="right">
           <template #default="{ row }">
             <!-- 回收站操作 -->
             <template v-if="isRecycleBin">
@@ -198,12 +227,14 @@
 
     <!-- 上传进度对话框 -->
     <el-dialog v-model="uploadDialogVisible" title="上传文件" width="500px" :close-on-click-modal="false">
-      <div v-for="(item, index) in uploadQueue" :key="index" class="upload-item mb-4">
-        <div class="flex justify-between mb-1">
-          <span class="text-sm truncate" style="max-width: 300px;">{{ item.name }}</span>
-          <span class="text-xs text-gray-400">{{ item.status }}</span>
+      <div class="upload-list">
+        <div v-for="(item, index) in uploadQueue" :key="index" class="upload-item mb-4">
+          <div class="flex justify-between mb-1">
+            <span class="text-sm truncate" style="max-width: 300px;">{{ item.name }}</span>
+            <span class="text-xs text-gray-400">{{ item.status }}</span>
+          </div>
+          <el-progress :percentage="item.progress" :status="item.error ? 'exception' : undefined" />
         </div>
-        <el-progress :percentage="item.progress" :status="item.error ? 'exception' : undefined" />
       </div>
     </el-dialog>
 
@@ -212,6 +243,23 @@
       v-model="shareDialogVisible"
       :selected-items="shareSelectedItems"
       @success="handleShareSuccess"
+    />
+
+    <!-- 移动文件夹对话框 -->
+    <FolderSelectDialog
+      v-model:visible="moveDialogVisible"
+      title="移动到"
+      :current-folder-id="currentFolderId"
+      :exclude-ids="operationTargetFiles.map(f => f.id)"
+      @confirm="confirmMove"
+    />
+
+    <!-- 复制文件夹对话框 -->
+    <FolderSelectDialog
+      v-model:visible="copyDialogVisible"
+      title="复制到"
+      :current-folder-id="currentFolderId"
+      @confirm="confirmCopy"
     />
 
     <!-- 右键菜单 -->
@@ -232,10 +280,23 @@
         <div class="menu-item" @click="handleContextMenuAction('download')">
           <el-icon><Download /></el-icon> 下载
         </div>
+        <div 
+          v-if="['pdf', 'doc', 'docx', 'txt', 'md'].includes(contextMenuTarget?.fileExt || '')"
+          class="menu-item" 
+          @click="handleContextMenuAction('vectorize')"
+        >
+          <el-icon><MagicStick /></el-icon> 智能分析
+        </div>
         <div class="menu-item" @click="handleContextMenuAction('share')">
           <el-icon><Share /></el-icon> 分享
         </div>
         <el-divider class="menu-divider" />
+        <div class="menu-item" @click="handleContextMenuAction('move')">
+          <el-icon><Scissor /></el-icon> 移动
+        </div>
+        <div class="menu-item" @click="handleContextMenuAction('copy')">
+          <el-icon><DocumentCopy /></el-icon> 复制
+        </div>
         <div class="menu-item" @click="handleContextMenuAction('rename')">
           <el-icon><Edit /></el-icon> 重命名
         </div>
@@ -253,15 +314,20 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   HomeFilled, FolderAdd, Upload, Document, Folder, List, Grid,
   Download, Share, Delete, Picture, VideoPlay, Headset, FolderOpened,
-  Loading, Edit, RefreshLeft
+  Loading, Edit, RefreshLeft, Scissor, DocumentCopy, MagicStick
 } from '@element-plus/icons-vue'
 import ShareBatchDialog from '@/components/ShareBatchDialog.vue'
+import FolderSelectDialog from '@/components/FolderSelectDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  getFileList, uploadFile, deleteFile, renameFile, downloadFileStream,
-  createFolder, restoreFile, permanentDeleteFile, getRecycleList,
+  getFileList, deleteFile, renameFile, downloadFileStream,
+  createFolder, restoreFile, permanentDeleteFile, getRecycleList, deleteFolder,
   type FileInfo
 } from '@/api/file'
+import { vectorizeFile } from '@/api/ai'
+import { smartUploadFile } from '@/utils/smartUpload'
+
+
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -435,8 +501,17 @@ const handleContextMenuAction = (action: string) => {
         handleDownload(row)
       }
       break
+    case 'vectorize':
+      handleVectorize(row)
+      break
     case 'share':
       handleShare(row)
+      break
+    case 'move':
+      handleMove(row)
+      break
+    case 'copy':
+      handleCopy(row)
       break
     case 'rename':
       showRenameDialog(row)
@@ -473,20 +548,22 @@ const handleFileChange = async (e: Event) => {
     const file = files[i]
     const queueItem = uploadQueue.value[i]
     if (!queueItem || !file) continue
-    
-    queueItem.status = '上传中...'
-    
+
+    queueItem.status = '准备上传...'
+
     try {
-      await uploadFile(file, currentFolderId.value, (percent) => {
+      await smartUploadFile(file, currentFolderId.value, (progress) => {
         const item = uploadQueue.value[i]
         if (item) {
-          item.progress = percent
+          item.progress = progress.percent
+          item.status = progress.stageText
         }
       })
       queueItem.status = '上传成功'
       queueItem.progress = 100
       userStore.updateUsedSpace(file.size)
-    } catch {
+    } catch (error) {
+      console.error('上传失败:', error)
       queueItem.status = '上传失败'
       queueItem.error = true
     }
@@ -505,12 +582,118 @@ const handleFileChange = async (e: Event) => {
   }, 1500)
 }
 
-const handleFolderChange = (e: Event) => {
+const handleFolderChange = async (e: Event) => {
   const target = e.target as HTMLInputElement
   const files = target.files
-  if (files) {
-    console.log('上传文件夹:', files)
-    // TODO: 实现文件夹上传
+  if (!files || files.length === 0) return
+
+  // 1. 解析文件路径结构
+  const fileArray = Array.from(files)
+  const totalFiles = fileArray.length
+  
+  if (totalFiles > 100) {
+    ElMessage.warning(`文件夹包含 ${totalFiles} 个文件，上传可能需要较长时间`)
+  }
+
+  uploadDialogVisible.value = true
+  uploadQueue.value = []
+
+  // 2. 递归创建文件夹并上传
+  // 注意：webkitdirectory 返回的文件包含 webkitRelativePath 属性，如 "folder/sub/file.txt"
+  // 我们需要解析这些路径并在后端创建对应的文件夹结构
+  
+  // 缓存已创建的文件夹 ID: "path/to/folder" -> folderId
+  const folderCache: Record<string, number> = {
+    '': currentFolderId.value // 根路径对应当前文件夹
+  }
+
+  // 辅助函数：确保文件夹存在
+  async function ensureFolder(path: string): Promise<number> {
+    if (folderCache[path] !== undefined) {
+      return folderCache[path]
+    }
+
+    const parts = path.split('/')
+    let currentPath = ''
+    let parentId = currentFolderId.value
+
+    for (const part of parts) {
+      const parentPath = currentPath
+      // 正确处理路径拼接，避免双斜杠
+      currentPath = currentPath ? `${currentPath}/${part}` : part
+
+      if (folderCache[currentPath] !== undefined) {
+        parentId = folderCache[currentPath] as number
+        continue
+      }
+
+      // 创建文件夹
+      try {
+        const folder = await createFolder(part, parentId)
+        folderCache[currentPath] = folder.id
+        parentId = folder.id
+      } catch (error) {
+        console.error(`创建文件夹失败: ${currentPath}`, error)
+         throw error
+      }
+    }
+    return parentId
+  }
+
+  // 3. 处理每个文件
+  for (const file of fileArray) {
+    const relativePath = file.webkitRelativePath
+    const pathParts = relativePath.split('/')
+    const fileName = pathParts.pop() // 最后一部分是文件名
+    const folderPath = pathParts.join('/') // 剩余部分是文件夹路径
+
+    // 添加到队列
+    const queueItem = {
+      name: relativePath, // 显示完整相对路径
+      progress: 0,
+      status: '等待上传',
+      error: false
+    }
+    uploadQueue.value.push(queueItem)
+    const queueIndex = uploadQueue.value.length - 1
+
+    try {
+      queueItem.status = '准备中...'
+      // 确保父文件夹存在
+      const folderId = await ensureFolder(folderPath)
+
+      // 上传文件
+      queueItem.status = '上传中...'
+      await smartUploadFile(file, folderId, (progress) => {
+        if (uploadQueue.value[queueIndex]) {
+          uploadQueue.value[queueIndex].progress = progress.percent
+          uploadQueue.value[queueIndex].status = progress.stageText
+        }
+      })
+
+      queueItem.status = '上传成功'
+      queueItem.progress = 100
+      userStore.updateUsedSpace(file.size)
+    } catch (error) {
+      console.error(`上传失败: ${relativePath}`, error)
+      queueItem.status = '上传失败'
+      queueItem.error = true
+    }
+  }
+
+  // 刷新列表
+  await loadFileList()
+  
+  // 重置 input
+  target.value = ''
+  
+  // 延迟关闭对话框（如果全部成功）
+  const hasError = uploadQueue.value.some(item => item.error)
+  if (!hasError) {
+    setTimeout(() => {
+      uploadDialogVisible.value = false
+      uploadQueue.value = []
+    }, 2000)
   }
 }
 
@@ -622,8 +805,11 @@ const handleRename = async () => {
 
 const handleDelete = async (row: FileInfo) => {
   try {
+    const isFolder = row.fileType === 'folder'
+    const typeName = isFolder ? '文件夹' : '文件'
+    
     await ElMessageBox.confirm(
-      '确定要删除此文件吗？文件将移入回收站。',
+      `确定要删除此${typeName}吗？${isFolder ? '文件夹内的所有内容也将被删除。' : '文件将移入回收站。'}`,
       '删除确认',
       {
         confirmButtonText: '确定',
@@ -632,13 +818,19 @@ const handleDelete = async (row: FileInfo) => {
       }
     )
 
-    await deleteFile(row.id)
+    if (isFolder) {
+      await deleteFolder(row.id)
+    } else {
+      await deleteFile(row.id)
+      userStore.updateUsedSpace(-row.fileSize)
+    }
+    
     ElMessage.success('删除成功')
-    userStore.updateUsedSpace(-row.fileSize)
     await loadFileList()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
+      ElMessage.error('删除失败，请稍后重试')
     }
   }
 }
@@ -646,8 +838,16 @@ const handleDelete = async (row: FileInfo) => {
 // 恢复文件（回收站）
 const handleRestore = async (row: FileInfo) => {
   try {
-    await restoreFile(row.id)
-    ElMessage.success('文件已恢复')
+    const isFolder = row.fileType === 'folder'
+
+    if (isFolder) {
+      const { restoreFolder } = await import('@/api/file')
+      await restoreFolder(row.id)
+    } else {
+      await restoreFile(row.id)
+    }
+
+    ElMessage.success(`${isFolder ? '文件夹' : '文件'}已恢复`)
     await loadFileList()
   } catch (error) {
     console.error('恢复失败:', error)
@@ -657,8 +857,11 @@ const handleRestore = async (row: FileInfo) => {
 // 彻底删除文件（回收站）
 const handlePermanentDelete = async (row: FileInfo) => {
   try {
+    const isFolder = row.fileType === 'folder'
+    const typeName = isFolder ? '文件夹' : '文件'
+
     await ElMessageBox.confirm(
-      '确定要彻底删除此文件吗？此操作不可恢复！',
+      `确定要彻底删除此${typeName}吗？此操作不可恢复！`,
       '彻底删除',
       {
         confirmButtonText: '确定删除',
@@ -667,9 +870,15 @@ const handlePermanentDelete = async (row: FileInfo) => {
       }
     )
 
-    await permanentDeleteFile(row.id)
-    ElMessage.success('文件已彻底删除')
-    userStore.updateUsedSpace(-row.fileSize)
+    if (isFolder) {
+      const { permanentDeleteFolder } = await import('@/api/file')
+      await permanentDeleteFolder(row.id)
+    } else {
+      await permanentDeleteFile(row.id)
+      userStore.updateUsedSpace(-row.fileSize)
+    }
+
+    ElMessage.success(`${typeName}已彻底删除`)
     await loadFileList()
   } catch (error) {
     if (error !== 'cancel') {
@@ -688,6 +897,232 @@ watch(() => route.path, () => {
 onMounted(() => {
   loadFileList()
 })
+
+const handleVectorize = async (row: FileInfo) => {
+  try {
+    await vectorizeFile(row.id)
+    ElMessage.success('已开始智能分析，请稍后在 AI 助手中查看')
+  } catch (error) {
+    console.error('触发向量化失败:', error)
+  }
+}
+
+// 移动/复制相关
+const moveDialogVisible = ref(false)
+const copyDialogVisible = ref(false)
+const operationTargetFiles = ref<FileInfo[]>([]) // 当前操作的目标文件列表
+
+// 单文件/文件夹 移动/复制
+const handleMove = (row: FileInfo) => {
+  operationTargetFiles.value = [row]
+  moveDialogVisible.value = true
+}
+
+const handleCopy = (row: FileInfo) => {
+  operationTargetFiles.value = [row]
+  copyDialogVisible.value = true
+}
+
+// 批量 移动/复制/删除
+const handleBatchMove = () => {
+  if (selectedFiles.value.length === 0) return
+  operationTargetFiles.value = selectedFiles.value
+  moveDialogVisible.value = true
+}
+
+const handleBatchCopy = () => {
+  if (selectedFiles.value.length === 0) return
+  operationTargetFiles.value = selectedFiles.value
+  copyDialogVisible.value = true
+}
+
+const handleBatchDelete = async () => {
+  if (selectedFiles.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedFiles.value.length} 个文件/文件夹吗？`,
+      '批量删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    // 分离文件和文件夹
+    const files = selectedFiles.value.filter(f => f.fileType !== 'folder')
+    const folders = selectedFiles.value.filter(f => f.fileType === 'folder')
+
+    // 删除文件
+    if (files.length > 0) {
+      const fileIds = files.map(f => f.id)
+      const { batchDeleteFiles } = await import('@/api/file')
+      await batchDeleteFiles(fileIds)
+    }
+
+    // 删除文件夹
+    if (folders.length > 0) {
+      const { deleteFolder } = await import('@/api/file')
+      for (const folder of folders) {
+        await deleteFolder(folder.id)
+      }
+    }
+
+    ElMessage.success('批量删除成功')
+
+    // 更新已用空间（只对文件更新）
+    files.forEach(f => {
+      userStore.updateUsedSpace(-f.fileSize)
+    })
+
+    await loadFileList()
+    selectedFiles.value = [] // 清空选中
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+    }
+  }
+}
+
+// 批量恢复（回收站）
+const handleBatchRestore = async () => {
+  if (selectedFiles.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要恢复选中的 ${selectedFiles.value.length} 个文件/文件夹吗？`,
+      '批量恢复',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info'
+      }
+    )
+
+    // 分离文件和文件夹
+    const files = selectedFiles.value.filter(f => f.fileType !== 'folder')
+    const folders = selectedFiles.value.filter(f => f.fileType === 'folder')
+
+    // 恢复文件
+    if (files.length > 0) {
+      const { restoreFile } = await import('@/api/file')
+      for (const file of files) {
+        await restoreFile(file.id)
+      }
+    }
+
+    // 恢复文件夹
+    if (folders.length > 0) {
+      const { restoreFolder } = await import('@/api/file')
+      for (const folder of folders) {
+        await restoreFolder(folder.id)
+      }
+    }
+
+    ElMessage.success('批量恢复成功')
+    await loadFileList()
+    selectedFiles.value = [] // 清空选中
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量恢复失败:', error)
+      ElMessage.error('批量恢复失败，请稍后重试')
+    }
+  }
+}
+
+// 批量彻底删除（回收站）
+const handleBatchPermanentDelete = async () => {
+  if (selectedFiles.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要彻底删除选中的 ${selectedFiles.value.length} 个文件/文件夹吗？此操作不可恢复！`,
+      '批量彻底删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'error'
+      }
+    )
+
+    // 分离文件和文件夹
+    const files = selectedFiles.value.filter(f => f.fileType !== 'folder')
+    const folders = selectedFiles.value.filter(f => f.fileType === 'folder')
+
+    // 彻底删除文件
+    if (files.length > 0) {
+      const { permanentDeleteFile } = await import('@/api/file')
+      for (const file of files) {
+        await permanentDeleteFile(file.id)
+        userStore.updateUsedSpace(-file.fileSize)
+      }
+    }
+
+    // 彻底删除文件夹
+    if (folders.length > 0) {
+      const { permanentDeleteFolder } = await import('@/api/file')
+      for (const folder of folders) {
+        await permanentDeleteFolder(folder.id)
+      }
+    }
+
+    ElMessage.success('批量彻底删除成功')
+    await loadFileList()
+    selectedFiles.value = [] // 清空选中
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量彻底删除失败:', error)
+      ElMessage.error('批量彻底删除失败，请稍后重试')
+    }
+  }
+}
+
+// 执行移动
+const confirmMove = async (targetFolderId: number) => {
+  if (operationTargetFiles.value.length === 0) return
+  
+  try {
+    const { moveFile, batchMoveFiles } = await import('@/api/file')
+    
+    // 如果是单个文件且操作列表只有1个
+    if (operationTargetFiles.value.length === 1) {
+      await moveFile(operationTargetFiles.value[0]!.id, targetFolderId)
+    } else {
+      // 批量移动
+      const fileIds = operationTargetFiles.value.map(f => f.id)
+      await batchMoveFiles(fileIds, targetFolderId)
+    }
+    
+    ElMessage.success('移动成功')
+    await loadFileList()
+  } catch (error) {
+    console.error('移动失败:', error)
+  }
+}
+
+// 执行复制
+const confirmCopy = async (targetFolderId: number) => {
+  if (operationTargetFiles.value.length === 0) return
+  
+  try {
+    const { copyFile, batchCopyFiles } = await import('@/api/file')
+    
+    // 如果是单个文件且操作列表只有1个
+    if (operationTargetFiles.value.length === 1) {
+      await copyFile(operationTargetFiles.value[0]!.id, targetFolderId)
+    } else {
+      // 批量复制
+      const fileIds = operationTargetFiles.value.map(f => f.id)
+      await batchCopyFiles(fileIds, targetFolderId)
+    }
+    
+    ElMessage.success('复制成功')
+    await loadFileList()
+  } catch (error) {
+    console.error('复制失败:', error)
+  }
+}
 </script>
 
 <style scoped>
@@ -760,6 +1195,12 @@ onMounted(() => {
   background: #f9fafb;
   padding: 12px;
   border-radius: 8px;
+}
+
+.upload-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px; /* 防止滚动条遮挡内容 */
 }
 
 /* 右键菜单样式 */

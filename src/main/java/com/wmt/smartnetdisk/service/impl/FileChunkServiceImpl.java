@@ -98,6 +98,13 @@ public class FileChunkServiceImpl extends ServiceImpl<FileChunkMapper, FileChunk
         String fileMd5 = uploadDTO.getFileMd5();
         Integer chunkIndex = uploadDTO.getChunkIndex();
 
+        // 检查分片是否已存在（避免重复上传）
+        FileChunk existingChunk = fileChunkMapper.selectByMd5AndIndex(fileMd5, chunkIndex);
+        if (existingChunk != null) {
+            log.info("分片已存在，跳过上传: fileMd5={}, chunkIndex={}", fileMd5, chunkIndex);
+            return;
+        }
+
         // 生成分片存储路径: chunks/{fileMd5}/{chunkIndex}
         String chunkPath = String.format("chunks/%s/%d", fileMd5, chunkIndex);
 
@@ -115,7 +122,6 @@ public class FileChunkServiceImpl extends ServiceImpl<FileChunkMapper, FileChunk
             chunk.setStatus(1); // 已完成
             chunk.setCreateTime(LocalDateTime.now());
 
-            // 使用 saveOrUpdate 避免重复上传冲突
             this.save(chunk);
 
             // 更新 Redis 进度

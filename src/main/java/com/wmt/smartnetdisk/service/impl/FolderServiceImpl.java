@@ -100,10 +100,46 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
         if (folder == null || !folder.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FOLDER_NOT_FOUND);
         }
-        // 软删除
+        // 检查文件夹是否已删除
+        if (folder.getDeleted() == 1) {
+            log.warn("文件夹已在回收站中: folderId={}", folderId);
+            return;
+        }
+        // 软删除（移入回收站）
         folder.setDeleted(1);
+        folder.setDeleteTime(java.time.LocalDateTime.now());
+        boolean updated = updateById(folder);
+        if (!updated) {
+            log.error("文件夹删除失败，数据库更新失败: folderId={}", folderId);
+            throw new BusinessException(ResultCode.DATA_UPDATE_FAIL, "文件夹删除失败");
+        }
+        log.info("文件夹移入回收站成功: folderId={}, folderName={}", folderId, folder.getFolderName());
+        // TODO: 递归删除子文件夹和文件
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void restoreFolder(Long userId, Long folderId) {
+        Folder folder = getById(folderId);
+        if (folder == null || !folder.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FOLDER_NOT_FOUND);
+        }
+        folder.setDeleted(0);
+        folder.setDeleteTime(null);
         updateById(folder);
-        log.info("文件夹删除成功: folderId={}", folderId);
+        log.info("文件夹恢复成功: folderId={}, folderName={}", folderId, folder.getFolderName());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void permanentDeleteFolder(Long userId, Long folderId) {
+        Folder folder = getById(folderId);
+        if (folder == null || !folder.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.FOLDER_NOT_FOUND);
+        }
+        // 彻底删除（物理删除）
+        removeById(folderId);
+        log.info("文件夹彻底删除成功: folderId={}, folderName={}", folderId, folder.getFolderName());
         // TODO: 递归删除子文件夹和文件
     }
 

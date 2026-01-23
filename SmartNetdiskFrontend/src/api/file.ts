@@ -54,6 +54,15 @@ export interface UploadResult {
     fastUpload?: boolean
 }
 
+/**
+ * 分片检测结果
+ */
+export interface ChunkCheckResult {
+    fastUploaded: boolean
+    uploadResult?: UploadResult
+    uploadedChunks: number[]
+}
+
 // ==================== 文件 API ====================
 
 /**
@@ -109,6 +118,59 @@ export async function checkFastUpload(params: {
     folderId?: number
 }): Promise<UploadResult | null> {
     const res = await api.post<unknown, ApiResponse<UploadResult | null>>('/file/check', params)
+    return res.data
+}
+
+/**
+ * 分片上传检测（秒传 + 断点续传）
+ */
+export async function checkChunks(params: {
+    fileMd5: string
+    fileName: string
+    fileSize: number
+    folderId?: number
+}): Promise<ChunkCheckResult> {
+    const res = await api.post<unknown, ApiResponse<ChunkCheckResult>>('/file/chunk/check', params)
+    return res.data
+}
+
+/**
+ * 上传单个分片
+ */
+export async function uploadChunk(
+    chunk: Blob,
+    params: {
+        fileMd5: string
+        chunkIndex: number
+        totalChunks: number
+        chunkSize: number
+    }
+): Promise<void> {
+    const formData = new FormData()
+    formData.append('file', chunk)
+    formData.append('fileMd5', params.fileMd5)
+    formData.append('chunkIndex', String(params.chunkIndex))
+    formData.append('totalChunks', String(params.totalChunks))
+    formData.append('chunkSize', String(params.chunkSize))
+
+    await api.post<unknown, ApiResponse<void>>('/file/chunk', formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data'
+        }
+    })
+}
+
+/**
+ * 合并分片
+ */
+export async function mergeChunks(params: {
+    fileMd5: string
+    fileName: string
+    totalSize: number
+    totalChunks: number
+    folderId?: number
+}): Promise<UploadResult> {
+    const res = await api.post<unknown, ApiResponse<UploadResult>>('/file/merge', params)
     return res.data
 }
 
@@ -242,6 +304,20 @@ export async function renameFolder(folderId: number, newName: string): Promise<v
  */
 export async function deleteFolder(folderId: number): Promise<void> {
     await api.delete<unknown, ApiResponse<void>>(`/folder/${folderId}`)
+}
+
+/**
+ * 恢复文件夹
+ */
+export async function restoreFolder(folderId: number): Promise<void> {
+    await api.post<unknown, ApiResponse<void>>(`/folder/${folderId}/restore`)
+}
+
+/**
+ * 彻底删除文件夹
+ */
+export async function permanentDeleteFolder(folderId: number): Promise<void> {
+    await api.delete<unknown, ApiResponse<void>>(`/folder/${folderId}/permanent`)
 }
 
 /**

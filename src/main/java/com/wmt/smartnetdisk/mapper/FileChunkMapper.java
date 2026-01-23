@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.wmt.smartnetdisk.entity.FileChunk;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
@@ -52,4 +53,14 @@ public interface FileChunkMapper extends BaseMapper<FileChunk> {
      */
     @Select("SELECT COUNT(*) FROM file_chunk WHERE file_md5 = #{fileMd5} AND status = 1")
     int countUploadedChunks(String fileMd5);
+
+    /**
+     * 根据文件 MD5 和分片索引查询分片
+     *
+     * @param fileMd5    文件MD5
+     * @param chunkIndex 分片索引
+     * @return 分片信息，不存在则返回 null
+     */
+    @Select("SELECT * FROM file_chunk WHERE file_md5 = #{fileMd5} AND chunk_index = #{chunkIndex} LIMIT 1")
+    FileChunk selectByMd5AndIndex(@Param("fileMd5") String fileMd5, @Param("chunkIndex") Integer chunkIndex);
 }

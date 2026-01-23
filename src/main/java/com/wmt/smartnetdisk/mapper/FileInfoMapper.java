@@ -118,4 +118,48 @@ public interface FileInfoMapper extends BaseMapper<FileInfo> {
               AND fi.deleted = 0
             """)
     Map<String, Object> sumFileSizeRecursive(@Param("userId") Long userId, @Param("folderId") Long folderId);
+
+    /**
+     * 联合查询回收站中的文件夹和文件
+     *
+     * @param userId 用户ID
+     * @param offset 偏移量
+     * @param limit  限制数量
+     * @return 已删除的文件列表（包含文件夹）
+     */
+    @Select("""
+            (
+                SELECT id, folder_name AS file_name, 0 AS file_size, 'folder' AS file_type,
+                       '' AS file_ext, NULL AS thumbnail_path, 0 AS is_vectorized,
+                       parent_id AS folder_id, create_time, update_time, delete_time, 0 AS sort_order
+                FROM folder
+                WHERE user_id = #{userId} AND deleted = 1
+            )
+            UNION ALL
+            (
+                SELECT id, file_name, file_size, file_type, file_ext, thumbnail_path,
+                       is_vectorized, folder_id, create_time, update_time, delete_time, 1 AS sort_order
+                FROM file_info
+                WHERE user_id = #{userId} AND deleted = 1
+            )
+            ORDER BY delete_time DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    List<Map<String, Object>> listRecycledFilesAndFolders(@Param("userId") Long userId,
+                                                           @Param("offset") long offset,
+                                                           @Param("limit") int limit);
+
+    /**
+     * 统计回收站中的文件夹和文件总数
+     */
+    @Select("""
+            SELECT (
+                SELECT COUNT(*) FROM folder
+                WHERE user_id = #{userId} AND deleted = 1
+            ) + (
+                SELECT COUNT(*) FROM file_info
+                WHERE user_id = #{userId} AND deleted = 1
+            ) AS total
+            """)
+    long countRecycledFilesAndFolders(@Param("userId") Long userId);
 }

@@ -16,7 +16,6 @@ import com.wmt.smartnetdisk.service.IAiService;
 import com.wmt.smartnetdisk.service.IFileService;
 import com.wmt.smartnetdisk.service.IFolderService;
 import com.wmt.smartnetdisk.service.IUserService;
-import com.wmt.smartnetdisk.utils.Md5Utils;
 import com.wmt.smartnetdisk.utils.MinioUtils;
 import com.wmt.smartnetdisk.vo.FileVO;
 import com.wmt.smartnetdisk.vo.FolderVO;
@@ -414,16 +413,20 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
 
     @Override
     public PageResult<FileVO> listRecycledFiles(Long userId, FileListDTO listDTO) {
-        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(FileInfo::getUserId, userId)
-                .eq(FileInfo::getDeleted, 1)
-                .orderByDesc(FileInfo::getDeleteTime);
+        long offset = (listDTO.getPageNum() - 1) * listDTO.getPageSize();
+        int limit = listDTO.getPageSize();
 
-        Page<FileInfo> page = new Page<>(listDTO.getPageNum(), listDTO.getPageSize());
-        Page<FileInfo> result = baseMapper.selectPage(page, wrapper);
+        // 联合查询已删除的文件夹和文件
+        List<java.util.Map<String, Object>> rows = baseMapper.listRecycledFilesAndFolders(
+                userId, offset, limit);
 
-        List<FileVO> voList = result.getRecords().stream().map(this::toVO).toList();
-        return PageResult.of(result.getCurrent(), result.getSize(), result.getTotal(), voList);
+        // 获取总数
+        long total = baseMapper.countRecycledFilesAndFolders(userId);
+
+        // 转换为 FileVO
+        List<FileVO> resultList = rows.stream().map(this::mapToFileVO).toList();
+
+        return PageResult.of((long) listDTO.getPageNum(), (long) listDTO.getPageSize(), total, resultList);
     }
 
     @Override

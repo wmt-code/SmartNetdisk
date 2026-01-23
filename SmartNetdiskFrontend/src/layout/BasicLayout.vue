@@ -161,8 +161,7 @@ function handleSearch() {
 
 // 切换 AI 侧边栏
 function toggleAiSidebar() {
-  // TODO: 实现 AI 侧边栏切换
-  console.log('Toggle AI Sidebar')
+  aiSidebarRef.value?.toggle()
 }
 
 // 用户菜单命令

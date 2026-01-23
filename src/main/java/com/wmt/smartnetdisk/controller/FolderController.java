@@ -69,6 +69,26 @@ public class FolderController {
     }
 
     /**
+     * 恢复文件夹
+     */
+    @PostMapping("/{id}/restore")
+    public Result<Void> restoreFolder(@PathVariable("id") Long folderId) {
+        Long userId = authService.getCurrentUserId();
+        folderService.restoreFolder(userId, folderId);
+        return Result.success("恢复成功", null);
+    }
+
+    /**
+     * 彻底删除文件夹
+     */
+    @DeleteMapping("/{id}/permanent")
+    public Result<Void> permanentDeleteFolder(@PathVariable("id") Long folderId) {
+        Long userId = authService.getCurrentUserId();
+        folderService.permanentDeleteFolder(userId, folderId);
+        return Result.success("彻底删除成功", null);
+    }
+
+    /**
      * 获取文件夹树
      */
     @GetMapping("/tree")

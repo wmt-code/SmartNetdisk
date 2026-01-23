@@ -91,7 +91,8 @@ CREATE TABLE IF NOT EXISTS folder (
     folder_name VARCHAR(100) NOT NULL,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted SMALLINT NOT NULL DEFAULT 0
+    deleted SMALLINT NOT NULL DEFAULT 0,
+    delete_time TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_folder_user_parent ON folder(user_id, parent_id);
@@ -101,6 +102,7 @@ COMMENT ON COLUMN folder.id IS '文件夹ID';
 COMMENT ON COLUMN folder.user_id IS '所属用户ID';
 COMMENT ON COLUMN folder.parent_id IS '父文件夹ID, 0表示根目录';
 COMMENT ON COLUMN folder.folder_name IS '文件夹名称';
+COMMENT ON COLUMN folder.delete_time IS '删除时间（进入回收站的时间）';
 
 -- ===========================================
 -- 4. 分片上传记录表 (file_chunk)
