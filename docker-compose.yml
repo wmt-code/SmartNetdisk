@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  smartnetdisk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smartnetdisk:latest
+    container_name: smartnetdisk-app
+    restart: unless-stopped
+    ports:
+      - "9000:80"      # 前端端口（映射到宿主机 9000）
+      - "8081:8081"    # 后端端口
+    environment:
+      # 数据库配置（使用容器 IP）
+      - DB_HOST=172.17.0.2
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=Pgsql@2314
+      # Redis 配置
+      - REDIS_HOST=172.18.0.2
+      - REDIS_PASSWORD=redis_rbKhnX
+      # MinIO 配置
+      - MINIO_ENDPOINT=http://172.18.0.6:9000
+      - MINIO_ACCESS_KEY=minio_nCHiZS
+      - MINIO_SECRET_KEY=minio_ZPZEzf
+      # kkFileView 配置
+      - KKFILEVIEW_BASE_URL=http://172.18.0.4:8012
+      # AI 配置
+      - SILICONFLOW_API_KEY=sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm
+      # JVM 配置
+      - JAVA_OPTS=-Xms512m -Xmx1024m
+    networks:
+      - 1panel-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  1panel-network:
+    external: true
+    name: 1panel-network

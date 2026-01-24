@@ -1,0 +1,74 @@
+# 生产环境配置 - Docker 容器部署
+spring:
+  application:
+    name: SmartNetdisk
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:Pgsql@2314}
+    # 使用容器 IP 或容器名访问 PostgreSQL
+    url: jdbc:postgresql://${DB_HOST:172.17.0.2}:5432/smartnetdisk
+  data:
+    redis:
+      password: ${REDIS_PASSWORD:redis_rbKhnX}
+      # 使用容器 IP 或容器名访问 Redis
+      host: ${REDIS_HOST:172.18.0.2}
+      port: 6379
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 1000ms
+      timeout: 3000ms
+  servlet:
+    multipart:
+      max-file-size: 10GB
+      max-request-size: 10GB
+
+server:
+  port: 8081
+  tomcat:
+    max-http-form-post-size: 10GB
+    max-swallow-size: 10GB
+    connection-timeout: 60000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 生产环境关闭 SQL 日志
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+# MinIO 配置 - 使用容器 IP
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://172.18.0.6:9000}
+  access-key: ${MINIO_ACCESS_KEY:minio_nCHiZS}
+  secret-key: ${MINIO_SECRET_KEY:minio_ZPZEzf}
+  bucket-name: smartnetdisk
+
+# 硅基流动 AI 配置
+ai:
+  siliconflow:
+    api-key: ${SILICONFLOW_API_KEY:sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm}
+    base-url: https://api.siliconflow.cn/v1
+    model: Qwen/Qwen2.5-7B-Instruct
+    embedding-model: BAAI/bge-large-zh-v1.5
+
+# kkFileView 配置 - 使用容器 IP
+kkfileview:
+  base-url: ${KKFILEVIEW_BASE_URL:http://172.18.0.4:8012}
+
+# Sa-Token 配置
+sa-token:
+  token-name: satoken
+  timeout: 604800
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: false
+  is-read-body: true
