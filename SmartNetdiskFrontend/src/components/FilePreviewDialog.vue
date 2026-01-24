@@ -72,6 +72,8 @@
                     :src="previewUrl"
                     controls
                     class="video-player"
+                    @canplay="onMediaCanPlay"
+                    @error="onMediaError"
                 >
                     您的浏览器不支持视频播放
                 </video>
@@ -83,7 +85,14 @@
                     <div class="audio-icon">
                         <el-icon :size="80"><Headset /></el-icon>
                     </div>
-                    <audio ref="audioRef" :src="previewUrl" controls class="audio-player">
+                    <audio 
+                        ref="audioRef" 
+                        :src="previewUrl" 
+                        controls 
+                        class="audio-player"
+                        @canplay="onMediaCanPlay"
+                        @error="onMediaError"
+                    >
                         您的浏览器不支持音频播放
                     </audio>
                 </div>
@@ -142,7 +151,7 @@ import {
     Document,
     Headset
 } from '@element-plus/icons-vue'
-import { getPreviewUrl, getFileContent, downloadFileStream, type FileInfo } from '@/api/file'
+import { getPreviewUrl, getFileContent, downloadFileStream, getStreamUrl, type FileInfo } from '@/api/file'
 
 const props = defineProps<{
     modelValue: boolean
@@ -286,13 +295,20 @@ async function loadPreview() {
             // 获取文本内容
             const res = await getFileContent(props.file.id)
             textContent.value = res.content
+            loading.value = false  // 文本加载完成
+        } else if (type === 'video' || type === 'audio') {
+            // 视频和音频使用流式传输端点（支持Range请求）
+            previewUrl.value = getStreamUrl(props.file.id)
+            // 不在这里设置 loading = false，等待媒体元素的 canplay 事件
         } else if (type !== 'unsupported') {
-            // 获取预览 URL
+            // 其他文件类型获取预览 URL
             previewUrl.value = await getPreviewUrl(props.file.id)
+            loading.value = false  // URL获取完成
+        } else {
+            loading.value = false  // 不支持的类型
         }
     } catch (error: any) {
         ElMessage.error(error.message || '加载预览失败')
-    } finally {
         loading.value = false
     }
 }
@@ -349,6 +365,25 @@ function rotateLeft() {
 
 function rotateRight() {
     imageRotation.value += 90
+}
+
+// 媒体加载事件处理（视频和音频共用）
+function onMediaCanPlay() {
+    // 媒体可以播放，取消loading状态
+    loading.value = false
+}
+
+function onMediaError(event: Event) {
+    loading.value = false
+    const target = event.target as HTMLMediaElement
+    
+    // 忽略因为清空 src 导致的错误（关闭对话框时的正常行为）
+    if (!target.src || target.src === '' || target.src === window.location.href) {
+        return
+    }
+    
+    const mediaType = target.tagName.toLowerCase() === 'video' ? '视频' : '音频'
+    ElMessage.error(`${mediaType}加载失败: ${target.error?.message || '未知错误'}`)
 }
 </script>
 

@@ -32,6 +32,7 @@ server:
   tomcat:
     max-http-form-post-size: 10GB
     max-swallow-size: 10GB
+    connection-timeout: 60000  # 60秒连接超时，防止大文件传输时断开
 
 mybatis-plus:
   configuration:

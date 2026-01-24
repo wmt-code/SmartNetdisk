@@ -203,6 +203,37 @@ public class MinioUtils {
     }
 
     /**
+     * 下载文件指定范围（支持 Range 请求）
+     * <p>
+     * 使用 MinIO 的 offset 和 length 参数实现真正的 Range 请求
+     * 避免使用 skip() 导致的性能问题
+     * </p>
+     *
+     * @param storagePath 存储路径
+     * @param offset      起始位置（字节）
+     * @param length      读取长度（字节），null 表示读取到文件末尾
+     * @return 输入流
+     */
+    public InputStream downloadFileRange(String storagePath, long offset, Long length) {
+        try {
+            GetObjectArgs.Builder builder = GetObjectArgs.builder()
+                    .bucket(minioConfig.getBucketName())
+                    .object(storagePath)
+                    .offset(offset);
+
+            // 如果指定了长度，则设置长度参数
+            if (length != null && length > 0) {
+                builder.length(length);
+            }
+
+            return minioClient.getObject(builder.build());
+        } catch (Exception e) {
+            log.error("下载文件范围失败: {}, offset={}, length={}", storagePath, offset, length, e);
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND, "文件下载失败");
+        }
+    }
+
+    /**
      * 获取文件预览/下载 URL（带签名，有效期）
      *
      * @param storagePath 存储路径

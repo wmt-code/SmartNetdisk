@@ -228,6 +228,15 @@ export async function getPreviewUrl(fileId: number): Promise<string> {
 }
 
 /**
+ * 获取流式传输URL（用于视频/音频，支持Range请求）
+ */
+export function getStreamUrl(fileId: number): string {
+    const token = localStorage.getItem('satoken') || ''
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
+    return `${baseUrl}/file/${fileId}/stream?satoken=${token}`
+}
+
+/**
  * 文件内容响应
  */
 export interface FileContentResponse {

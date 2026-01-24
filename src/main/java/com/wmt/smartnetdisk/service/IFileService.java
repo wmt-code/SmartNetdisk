@@ -208,9 +208,11 @@ public interface IFileService extends IService<FileInfo> {
      *
      * @param userId 用户ID
      * @param fileId 文件ID
+     * @param offset 偏移量（从第几个字节开始读取，null 表示从头开始）
+     * @param limit  限制读取的字节数（null 表示使用默认分块大小）
      * @return 包含文件内容和元信息的 Map
      */
-    java.util.Map<String, Object> getFileContent(Long userId, Long fileId);
+    java.util.Map<String, Object> getFileContent(Long userId, Long fileId, Long offset, Long limit);
 
     /**
      * 保存文件文本内容（在线编辑后保存）

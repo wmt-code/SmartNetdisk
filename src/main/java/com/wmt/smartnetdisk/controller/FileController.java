@@ -139,7 +139,7 @@ public class FileController {
         FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
 
         try (InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath());
-             OutputStream outputStream = response.getOutputStream()) {
+                OutputStream outputStream = response.getOutputStream()) {
 
             // 设置响应头
             String fileName = fileInfo.getFileName();
@@ -166,13 +166,103 @@ public class FileController {
     }
 
     /**
+     * 流式传输文件（支持 Range 请求，用于视频/音频播放）
+     * 支持分段加载，浏览器可以拖动进度条
+     */
+    @GetMapping("/{id}/stream")
+    public void streamFile(
+            @PathVariable("id") Long fileId,
+            @RequestHeader(value = "Range", required = false) String rangeHeader,
+            HttpServletResponse response) {
+
+        Long userId = authService.getCurrentUserId();
+        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+
+        long fileSize = fileInfo.getFileSize();
+        long start = 0;
+        long end = fileSize - 1;
+
+        try {
+            // 解析 Range 请求头 (格式: bytes=start-end)
+            if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                String[] ranges = rangeHeader.substring(6).split("-");
+                start = Long.parseLong(ranges[0]);
+                if (ranges.length > 1 && !ranges[1].isEmpty()) {
+                    end = Long.parseLong(ranges[1]);
+                }
+                // 确保end不超过文件大小
+                end = Math.min(end, fileSize - 1);
+            }
+
+            long contentLength = end - start + 1;
+
+            // 设置响应头
+            response.setStatus(
+                    rangeHeader != null ? HttpServletResponse.SC_PARTIAL_CONTENT : HttpServletResponse.SC_OK);
+            response.setContentType(
+                    fileInfo.getMimeType() != null ? fileInfo.getMimeType() : MediaType.APPLICATION_OCTET_STREAM_VALUE);
+            response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+            response.setHeader(HttpHeaders.CONTENT_RANGE, String.format("bytes %d-%d/%d", start, end, fileSize));
+            response.setContentLengthLong(contentLength);
+
+            // 使用 MinIO 的 Range 请求直接获取指定范围的数据（高效！）
+            try (InputStream inputStream = minioUtils.downloadFileRange(fileInfo.getStoragePath(), start,
+                    contentLength);
+                    OutputStream outputStream = response.getOutputStream()) {
+
+                // 直接读取并输出数据，不需要 skip()
+                byte[] buffer = new byte[8192];
+                long bytesRemaining = contentLength;
+                int bytesRead;
+
+                while (bytesRemaining > 0 &&
+                        (bytesRead = inputStream.read(buffer, 0,
+                                (int) Math.min(buffer.length, bytesRemaining))) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                    bytesRemaining -= bytesRead;
+                }
+                outputStream.flush();
+
+                log.debug("流式传输成功: userId={}, fileId={}, range={}-{}/{}",
+                        userId, fileId, start, end, fileSize);
+            }
+        } catch (org.apache.catalina.connector.ClientAbortException e) {
+            // 客户端主动中止连接（浏览器取消请求），这是正常行为，不记录错误日志
+            log.debug("客户端中止连接: fileId={}, range={} (正常行为)", fileId, rangeHeader);
+        } catch (java.io.IOException e) {
+            // 检查是否是客户端中止导致的IOException
+            String message = e.getMessage();
+            if (message != null &&
+                    (message.contains("你的主机中的软件中止了一个已建立的连接") ||
+                            message.contains("Connection reset by peer") ||
+                            message.contains("Broken pipe") ||
+                            message.contains("远程主机强迫关闭了一个现有的连接"))) {
+                log.debug("客户端中止连接: fileId={} (正常行为)", fileId);
+            } else {
+                log.error("流式传输IO失败: fileId={}, range={}", fileId, rangeHeader, e);
+            }
+        } catch (Exception e) {
+            log.error("流式传输失败: fileId={}, range={}", fileId, rangeHeader, e);
+        }
+    }
+
+    /**
      * 获取文件预览链接
+     * 视频/音频文件使用更长的有效期(2小时)，其他文件10分钟
      */
     @GetMapping("/{id}/preview")
     public Result<Map<String, String>> getPreviewUrl(@PathVariable("id") Long fileId) {
         Long userId = authService.getCurrentUserId();
-        // 预览链接有效期：10分钟
-        String url = fileService.getPreviewUrl(userId, fileId, 600);
+        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+
+        // 视频和音频文件需要更长的有效期，避免播放过程中URL过期
+        int expiry = 600; // 默认10分钟
+        String fileType = fileInfo.getFileType();
+        if ("video".equals(fileType) || "audio".equals(fileType)) {
+            expiry = 7200; // 视频/音频使用2小时
+        }
+
+        String url = fileService.getPreviewUrl(userId, fileId, expiry);
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);
@@ -180,12 +270,21 @@ public class FileController {
 
     /**
      * 获取文件文本内容（用于在线编辑）
-     * 支持的文件类型：txt, md, json, xml, html, css, js, ts, java, py, go, c, cpp, h, yml, yaml, sh, bat, sql 等
+     * 支持的文件类型：txt, md, json, xml, html, css, js, ts, java, py, go, c, cpp, h, yml,
+     * yaml, sh, bat, sql 等
+     * 支持分块加载，默认每次加载 1MB
+     * 
+     * @param fileId 文件ID
+     * @param offset 偏移量（字节），默认为 0
+     * @param limit  限制大小（字节），默认为 1MB，最大 5MB
      */
     @GetMapping("/{id}/content")
-    public Result<Map<String, Object>> getFileContent(@PathVariable("id") Long fileId) {
+    public Result<Map<String, Object>> getFileContent(
+            @PathVariable("id") Long fileId,
+            @RequestParam(value = "offset", required = false) Long offset,
+            @RequestParam(value = "limit", required = false) Long limit) {
         Long userId = authService.getCurrentUserId();
-        Map<String, Object> data = fileService.getFileContent(userId, fileId);
+        Map<String, Object> data = fileService.getFileContent(userId, fileId, offset, limit);
         return Result.success(data);
     }
 
@@ -193,7 +292,8 @@ public class FileController {
      * 保存文件文本内容（在线编辑后保存）
      */
     @PutMapping("/{id}/content")
-    public Result<Void> saveFileContent(@PathVariable("id") Long fileId, @Valid @RequestBody SaveContentDTO saveContentDTO) {
+    public Result<Void> saveFileContent(@PathVariable("id") Long fileId,
+            @Valid @RequestBody SaveContentDTO saveContentDTO) {
         Long userId = authService.getCurrentUserId();
         fileService.saveFileContent(userId, fileId, saveContentDTO.getContent());
         return Result.success("保存成功", null);

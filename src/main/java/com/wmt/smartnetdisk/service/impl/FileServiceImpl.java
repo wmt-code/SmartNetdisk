@@ -591,16 +591,25 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
             // 数据库
             "sql",
             // 其他
-            "gitignore", "dockerignore", "editorconfig", "env"
-    );
+            "gitignore", "dockerignore", "editorconfig", "env");
 
     /**
-     * 最大可编辑文件大小：10MB
+     * 最大可编辑文件大小：100MB（支持分块加载）
      */
-    private static final long MAX_EDITABLE_SIZE = 10 * 1024 * 1024;
+    private static final long MAX_EDITABLE_SIZE = 100 * 1024 * 1024;
+
+    /**
+     * 默认分块大小：1MB
+     */
+    private static final long DEFAULT_CHUNK_SIZE = 1024 * 1024;
+
+    /**
+     * 最大分块大小：5MB
+     */
+    private static final long MAX_CHUNK_SIZE = 5 * 1024 * 1024;
 
     @Override
-    public java.util.Map<String, Object> getFileContent(Long userId, Long fileId) {
+    public java.util.Map<String, Object> getFileContent(Long userId, Long fileId, Long offset, Long limit) {
         FileInfo fileInfo = getFileWithPermission(userId, fileId);
 
         // 检查文件扩展名是否支持编辑
@@ -611,24 +620,63 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
 
         // 检查文件大小
         if (fileInfo.getFileSize() > MAX_EDITABLE_SIZE) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "文件过大，无法在线编辑（最大10MB）");
+            throw new BusinessException(ResultCode.BAD_REQUEST, "文件过大，无法在线编辑（最大100MB）");
         }
 
-        // 读取文件内容
-        try (java.io.InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath())) {
-            String content = new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        // 处理默认值
+        long actualOffset = (offset != null && offset > 0) ? offset : 0;
+        long actualLimit = (limit != null && limit > 0) ? Math.min(limit, MAX_CHUNK_SIZE) : DEFAULT_CHUNK_SIZE;
 
-            java.util.Map<String, Object> result = new java.util.HashMap<>();
-            result.put("content", content);
-            result.put("fileName", fileInfo.getFileName());
-            result.put("fileExt", fileInfo.getFileExt());
-            result.put("fileSize", fileInfo.getFileSize());
-            result.put("mimeType", fileInfo.getMimeType());
-            return result;
-        } catch (java.io.IOException e) {
-            log.error("读取文件内容失败: fileId={}", fileId, e);
-            throw new BusinessException(ResultCode.FILE_NOT_FOUND, "读取文件失败");
+        // 检查偏移量是否超出文件大小
+        long fileSize = fileInfo.getFileSize();
+        if (actualOffset >= fileSize) {
+            actualOffset = fileSize;
+            actualLimit = 0;
         }
+
+        // 计算实际读取的字节数（不能超过文件末尾）
+        long bytesToRead = Math.min(actualLimit, fileSize - actualOffset);
+        boolean hasMore = (actualOffset + bytesToRead) < fileSize;
+
+        // 读取文件内容（分块）
+        String content = "";
+        if (bytesToRead > 0) {
+            try (java.io.InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath())) {
+                // 跳过前面的字节
+                long skipped = inputStream.skip(actualOffset);
+                if (skipped != actualOffset) {
+                    log.warn("文件跳转字节数不匹配: expected={}, actual={}", actualOffset, skipped);
+                }
+
+                // 读取指定大小的内容
+                byte[] buffer = new byte[(int) bytesToRead];
+                int totalRead = 0;
+                int bytesRead;
+                while (totalRead < bytesToRead
+                        && (bytesRead = inputStream.read(buffer, totalRead, (int) (bytesToRead - totalRead))) != -1) {
+                    totalRead += bytesRead;
+                }
+
+                content = new String(buffer, 0, totalRead, java.nio.charset.StandardCharsets.UTF_8);
+            } catch (java.io.IOException e) {
+                log.error("读取文件内容失败: fileId={}, offset={}, limit={}", fileId, actualOffset, actualLimit, e);
+                throw new BusinessException(ResultCode.FILE_NOT_FOUND, "读取文件失败");
+            }
+        }
+
+        // 构建返回结果
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("content", content);
+        result.put("fileName", fileInfo.getFileName());
+        result.put("fileExt", fileInfo.getFileExt());
+        result.put("fileSize", fileSize);
+        result.put("mimeType", fileInfo.getMimeType());
+        result.put("offset", actualOffset);
+        result.put("limit", actualLimit);
+        result.put("bytesRead", bytesToRead);
+        result.put("hasMore", hasMore);
+
+        return result;
     }
 
     @Override
