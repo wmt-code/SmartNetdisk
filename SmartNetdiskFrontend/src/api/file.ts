@@ -220,7 +220,7 @@ export function downloadFileStream(fileId: number): void {
 }
 
 /**
- * 获取文件预览链接
+ * 获取文件预览链接（所有文件使用 kkFileView）
  */
 export async function getPreviewUrl(fileId: number): Promise<string> {
     const res = await api.get<unknown, ApiResponse<{ url: string }>>(`/file/${fileId}/preview`)

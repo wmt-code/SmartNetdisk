@@ -43,6 +43,7 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
 
     private final IUserService userService;
     private final MinioUtils minioUtils;
+    private final com.wmt.smartnetdisk.config.KkFileViewConfig kkFileViewConfig;
 
     @org.springframework.context.annotation.Lazy
     @org.springframework.beans.factory.annotation.Autowired
@@ -564,6 +565,16 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     public String getPreviewUrl(Long userId, Long fileId, int expiry) {
         FileInfo fileInfo = getFileWithPermission(userId, fileId);
         return minioUtils.getPreviewUrl(fileInfo.getStoragePath(), fileInfo.getMimeType(), expiry);
+    }
+
+    @Override
+    public String getKkFileViewPreviewUrl(Long userId, Long fileId, int expiry) {
+        FileInfo fileInfo = getFileWithPermission(userId, fileId);
+        // 使用简单的预签名 URL（不带 response-content-type 等额外参数）
+        // 避免 kkFileView 解析带分号的 URL 时出现 400 错误
+        String minioUrl = minioUtils.getPresignedUrl(fileInfo.getStoragePath(), expiry);
+        // 通过 kkFileView 生成预览页面 URL
+        return kkFileViewConfig.getPreviewUrl(minioUrl);
     }
 
     @Override

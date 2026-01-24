@@ -199,8 +199,18 @@ public class FileController {
             // 设置响应头
             response.setStatus(
                     rangeHeader != null ? HttpServletResponse.SC_PARTIAL_CONTENT : HttpServletResponse.SC_OK);
-            response.setContentType(
-                    fileInfo.getMimeType() != null ? fileInfo.getMimeType() : MediaType.APPLICATION_OCTET_STREAM_VALUE);
+
+            // 根据文件扩展名或已存储的 MIME 类型设置 Content-Type
+            String mimeType = fileInfo.getMimeType();
+            if (mimeType == null || mimeType.isBlank() || mimeType.equals(MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
+                // 根据扩展名推断 MIME 类型
+                mimeType = inferMimeType(fileInfo.getFileExt());
+            }
+            response.setContentType(mimeType);
+
+            // CORS 支持（跨域 Range 请求需要）
+            response.setHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                    "Content-Range, Accept-Ranges, Content-Length, Content-Type");
             response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
             response.setHeader(HttpHeaders.CONTENT_RANGE, String.format("bytes %d-%d/%d", start, end, fileSize));
             response.setContentLengthLong(contentLength);
@@ -248,21 +258,13 @@ public class FileController {
 
     /**
      * 获取文件预览链接
-     * 视频/音频文件使用更长的有效期(2小时)，其他文件10分钟
+     * 所有文件类型都使用 kkFileView 预览
      */
     @GetMapping("/{id}/preview")
     public Result<Map<String, String>> getPreviewUrl(@PathVariable("id") Long fileId) {
         Long userId = authService.getCurrentUserId();
-        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
-
-        // 视频和音频文件需要更长的有效期，避免播放过程中URL过期
-        int expiry = 600; // 默认10分钟
-        String fileType = fileInfo.getFileType();
-        if ("video".equals(fileType) || "audio".equals(fileType)) {
-            expiry = 7200; // 视频/音频使用2小时
-        }
-
-        String url = fileService.getPreviewUrl(userId, fileId, expiry);
+        // 所有文件都使用 kkFileView 预览（2小时有效期）
+        String url = fileService.getKkFileViewPreviewUrl(userId, fileId, 7200);
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);
@@ -419,5 +421,71 @@ public class FileController {
         Long userId = authService.getCurrentUserId();
         List<FileVO> newFiles = fileService.batchCopyFiles(userId, copyDTO.getFileIds(), copyDTO.getTargetFolderId());
         return Result.success("批量复制成功", newFiles);
+    }
+
+    /**
+     * 根据文件扩展名推断 MIME 类型
+     * 
+     * @param fileExt 文件扩展名（不含点号）
+     * @return MIME 类型
+     */
+    private String inferMimeType(String fileExt) {
+        if (fileExt == null || fileExt.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+
+        String ext = fileExt.toLowerCase();
+        return switch (ext) {
+            // 视频格式
+            case "mp4" -> "video/mp4";
+            case "webm" -> "video/webm";
+            case "ogg" -> "video/ogg";
+            case "mov" -> "video/quicktime";
+            case "avi" -> "video/x-msvideo";
+            case "mkv" -> "video/x-matroska";
+            case "m4v" -> "video/x-m4v";
+            case "flv" -> "video/x-flv";
+            case "wmv" -> "video/x-ms-wmv";
+            case "3gp" -> "video/3gpp";
+
+            // 音频格式
+            case "mp3" -> "audio/mpeg";
+            case "wav" -> "audio/wav";
+            case "aac" -> "audio/aac";
+            case "flac" -> "audio/flac";
+            case "m4a" -> "audio/mp4";
+            case "wma" -> "audio/x-ms-wma";
+            case "ape" -> "audio/ape";
+
+            // 图片格式
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            case "svg" -> "image/svg+xml";
+            case "bmp" -> "image/bmp";
+            case "ico" -> "image/x-icon";
+
+            // 文档格式
+            case "pdf" -> "application/pdf";
+            case "doc" -> "application/msword";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "xls" -> "application/vnd.ms-excel";
+            case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "ppt" -> "application/vnd.ms-powerpoint";
+            case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+            // 文本格式
+            case "txt" -> "text/plain";
+            case "html", "htm" -> "text/html";
+            case "css" -> "text/css";
+            case "js" -> "application/javascript";
+            case "json" -> "application/json";
+            case "xml" -> "application/xml";
+            case "md" -> "text/markdown";
+
+            // 默认
+            default -> MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        };
     }
 }

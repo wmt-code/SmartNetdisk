@@ -34,99 +34,58 @@
         </template>
 
         <div v-loading="loading" class="preview-content" :style="contentStyle">
-            <!-- 图片预览 -->
-            <template v-if="previewType === 'image'">
-                <div class="image-preview">
-                    <img
-                        :src="previewUrl"
-                        :alt="fileName"
-                        :style="imageStyle"
-                        @load="onImageLoad"
-                    />
-                    <div class="image-controls">
-                        <el-button-group>
-                            <el-button size="small" @click="zoomOut">
-                                <el-icon><ZoomOut /></el-icon>
-                            </el-button>
-                            <el-button size="small" @click="resetZoom">
-                                {{ Math.round(imageScale * 100) }}%
-                            </el-button>
-                            <el-button size="small" @click="zoomIn">
-                                <el-icon><ZoomIn /></el-icon>
-                            </el-button>
-                            <el-button size="small" @click="rotateLeft">
-                                <el-icon><RefreshLeft /></el-icon>
-                            </el-button>
-                            <el-button size="small" @click="rotateRight">
-                                <el-icon><RefreshRight /></el-icon>
-                            </el-button>
-                        </el-button-group>
-                    </div>
+            <!-- 视频使用原生播放器 -->
+            <template v-if="isVideo && mediaUrl">
+                <div class="native-media-player video-player">
+                    <video
+                        ref="videoRef"
+                        :src="mediaUrl"
+                        controls
+                        autoplay
+                        preload="metadata"
+                        class="media-element"
+                    >
+                        您的浏览器不支持视频播放
+                    </video>
                 </div>
             </template>
 
-            <!-- 视频预览 -->
-            <template v-else-if="previewType === 'video'">
-                <video
-                    ref="videoRef"
-                    :src="previewUrl"
-                    controls
-                    class="video-player"
-                    @canplay="onMediaCanPlay"
-                    @error="onMediaError"
-                >
-                    您的浏览器不支持视频播放
-                </video>
-            </template>
-
-            <!-- 音频预览 -->
-            <template v-else-if="previewType === 'audio'">
-                <div class="audio-preview">
-                    <div class="audio-icon">
-                        <el-icon :size="80"><Headset /></el-icon>
+            <!-- 音频使用原生播放器 -->
+            <template v-else-if="isAudio && mediaUrl">
+                <div class="native-media-player audio-player">
+                    <div class="audio-cover">
+                        <el-icon :size="80" color="#667eea"><Headset /></el-icon>
                     </div>
-                    <audio 
-                        ref="audioRef" 
-                        :src="previewUrl" 
-                        controls 
-                        class="audio-player"
-                        @canplay="onMediaCanPlay"
-                        @error="onMediaError"
+                    <div class="audio-info">
+                        <h3 class="audio-title">{{ fileName }}</h3>
+                        <p class="audio-size">{{ fileSizeStr }}</p>
+                    </div>
+                    <audio
+                        ref="audioRef"
+                        :src="mediaUrl"
+                        controls
+                        autoplay
+                        preload="metadata"
+                        class="audio-element"
                     >
                         您的浏览器不支持音频播放
                     </audio>
                 </div>
             </template>
 
-            <!-- PDF 预览 -->
-            <template v-else-if="previewType === 'pdf'">
-                <iframe
-                    :src="previewUrl"
-                    class="pdf-viewer"
-                    frameborder="0"
-                ></iframe>
-            </template>
-
-            <!-- 文本/代码预览 -->
-            <template v-else-if="previewType === 'text'">
-                <div class="text-preview">
-                    <pre><code>{{ textContent }}</code></pre>
-                </div>
-            </template>
-
-            <!-- Office 文档预览 -->
-            <template v-else-if="previewType === 'office'">
-                <div class="office-preview">
+            <!-- 其他文件使用 kkFileView 预览 -->
+            <template v-else-if="previewUrl">
+                <div class="kkfileview-preview">
                     <iframe
-                        :src="officePreviewUrl"
-                        class="office-viewer"
+                        :src="previewUrl"
+                        class="kkfileview-viewer"
                         frameborder="0"
                     ></iframe>
                 </div>
             </template>
 
-            <!-- 不支持的文件类型 -->
-            <template v-else>
+            <!-- 加载中或无预览 -->
+            <template v-else-if="!loading">
                 <div class="unsupported-preview">
                     <el-icon :size="64"><Document /></el-icon>
                     <p>暂不支持预览此类型文件</p>
@@ -141,17 +100,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import {
-    ZoomIn,
-    ZoomOut,
-    RefreshLeft,
-    RefreshRight,
-    Document,
-    Headset
-} from '@element-plus/icons-vue'
-import { getPreviewUrl, getFileContent, downloadFileStream, getStreamUrl, type FileInfo } from '@/api/file'
+import { Document, Headset } from '@element-plus/icons-vue'
+import { getPreviewUrl, getStreamUrl, downloadFileStream, type FileInfo } from '@/api/file'
 
 const props = defineProps<{
     modelValue: boolean
@@ -170,50 +122,18 @@ const visible = computed({
 
 const loading = ref(false)
 const previewUrl = ref('')
-const textContent = ref('')
+const mediaUrl = ref('')
 const isFullscreen = ref(false)
-const imageScale = ref(1)
-const imageRotation = ref(0)
 
 // 文件名和大小
 const fileName = computed(() => props.file?.fileName || '')
 const fileSizeStr = computed(() => props.file?.fileSizeStr || '')
-const fileExt = computed(() => props.file?.fileExt?.toLowerCase() || '')
 
-// 判断预览类型
-const previewType = computed(() => {
-    const ext = fileExt.value
-    if (!ext) return 'unsupported'
+// 视频/音频扩展名（使用原生播放器）
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'm4v', 'flv', 'wmv']
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'wma', 'ape']
 
-    // 图片
-    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'].includes(ext)) {
-        return 'image'
-    }
-    // 视频
-    if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) {
-        return 'video'
-    }
-    // 音频
-    if (['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) {
-        return 'audio'
-    }
-    // PDF
-    if (ext === 'pdf') {
-        return 'pdf'
-    }
-    // 文本/代码
-    if (EDITABLE_EXTENSIONS.includes(ext)) {
-        return 'text'
-    }
-    // Office 文档
-    if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
-        return 'office'
-    }
-
-    return 'unsupported'
-})
-
-// 可编辑的文件扩展名
+// 是否可以编辑（文本文件支持在线编辑）
 const EDITABLE_EXTENSIONS = [
     'txt', 'md', 'markdown', 'log',
     'json', 'xml', 'yml', 'yaml', 'toml', 'ini', 'conf', 'cfg', 'properties',
@@ -223,21 +143,16 @@ const EDITABLE_EXTENSIONS = [
     'sql', 'gitignore', 'dockerignore', 'editorconfig', 'env'
 ]
 
-// 是否可以编辑
-const canEdit = computed(() => {
-    return EDITABLE_EXTENSIONS.includes(fileExt.value)
-})
+const fileExt = computed(() => props.file?.fileExt?.toLowerCase() || '')
+const canEdit = computed(() => EDITABLE_EXTENSIONS.includes(fileExt.value))
+const isVideo = computed(() => VIDEO_EXTENSIONS.includes(fileExt.value))
+const isAudio = computed(() => AUDIO_EXTENSIONS.includes(fileExt.value))
+const useNativePlayer = computed(() => isVideo.value || isAudio.value)
 
-// 对话框宽度
+// 对话框宽度（kkFileView 使用 90%）
 const dialogWidth = computed(() => {
     if (isFullscreen.value) return '100%'
-    const type = previewType.value
-    if (type === 'image') return '80%'
-    if (type === 'video') return '80%'
-    if (type === 'audio') return '500px'
-    if (type === 'pdf' || type === 'office') return '90%'
-    if (type === 'text') return '80%'
-    return '600px'
+    return '90%'
 })
 
 // 内容区域样式
@@ -245,24 +160,8 @@ const contentStyle = computed(() => {
     if (isFullscreen.value) {
         return { height: 'calc(100vh - 120px)' }
     }
-    const type = previewType.value
-    if (type === 'pdf' || type === 'office' || type === 'text') {
-        return { height: '70vh' }
-    }
-    return {}
-})
-
-// 图片样式
-const imageStyle = computed(() => ({
-    transform: `scale(${imageScale.value}) rotate(${imageRotation.value}deg)`,
-    transition: 'transform 0.3s ease'
-}))
-
-// Office 在线预览 URL
-const officePreviewUrl = computed(() => {
-    if (!previewUrl.value) return ''
-    // 使用 Microsoft Office Online 预览
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl.value)}`
+    // 使用 80vh 确保 kkFileView 有足够空间
+    return { height: '80vh' }
 })
 
 // 监听文件变化,加载预览
@@ -289,24 +188,14 @@ async function loadPreview() {
     resetState()
 
     try {
-        const type = previewType.value
-
-        if (type === 'text') {
-            // 获取文本内容
-            const res = await getFileContent(props.file.id)
-            textContent.value = res.content
-            loading.value = false  // 文本加载完成
-        } else if (type === 'video' || type === 'audio') {
-            // 视频和音频使用流式传输端点（支持Range请求）
-            previewUrl.value = getStreamUrl(props.file.id)
-            // 不在这里设置 loading = false，等待媒体元素的 canplay 事件
-        } else if (type !== 'unsupported') {
-            // 其他文件类型获取预览 URL
-            previewUrl.value = await getPreviewUrl(props.file.id)
-            loading.value = false  // URL获取完成
+        // 视频/音频使用原生播放器，直接获取流式 URL
+        if (useNativePlayer.value) {
+            mediaUrl.value = getStreamUrl(props.file.id)
         } else {
-            loading.value = false  // 不支持的类型
+            // 其他文件使用 kkFileView 预览
+            previewUrl.value = await getPreviewUrl(props.file.id)
         }
+        loading.value = false
     } catch (error: any) {
         ElMessage.error(error.message || '加载预览失败')
         loading.value = false
@@ -315,9 +204,7 @@ async function loadPreview() {
 
 function resetState() {
     previewUrl.value = ''
-    textContent.value = ''
-    imageScale.value = 1
-    imageRotation.value = 0
+    mediaUrl.value = ''
 }
 
 function handleClose() {
@@ -339,51 +226,6 @@ function handleEdit() {
 
 function toggleFullscreen() {
     isFullscreen.value = !isFullscreen.value
-}
-
-// 图片操作
-function onImageLoad() {
-    // 图片加载完成
-}
-
-function zoomIn() {
-    imageScale.value = Math.min(imageScale.value + 0.25, 5)
-}
-
-function zoomOut() {
-    imageScale.value = Math.max(imageScale.value - 0.25, 0.25)
-}
-
-function resetZoom() {
-    imageScale.value = 1
-    imageRotation.value = 0
-}
-
-function rotateLeft() {
-    imageRotation.value -= 90
-}
-
-function rotateRight() {
-    imageRotation.value += 90
-}
-
-// 媒体加载事件处理（视频和音频共用）
-function onMediaCanPlay() {
-    // 媒体可以播放，取消loading状态
-    loading.value = false
-}
-
-function onMediaError(event: Event) {
-    loading.value = false
-    const target = event.target as HTMLMediaElement
-    
-    // 忽略因为清空 src 导致的错误（关闭对话框时的正常行为）
-    if (!target.src || target.src === '' || target.src === window.location.href) {
-        return
-    }
-    
-    const mediaType = target.tagName.toLowerCase() === 'video' ? '视频' : '音频'
-    ElMessage.error(`${mediaType}加载失败: ${target.error?.message || '未知错误'}`)
 }
 </script>
 
@@ -423,67 +265,8 @@ function onMediaError(event: Event) {
 }
 
 .preview-content {
-    overflow: auto;
+    overflow: hidden;
     min-height: 300px;
-}
-
-// 图片预览
-.image-preview {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
-    background-color: #f5f5f5;
-    min-height: 400px;
-
-    img {
-        max-width: 100%;
-        max-height: 60vh;
-        object-fit: contain;
-    }
-
-    .image-controls {
-        margin-top: 16px;
-        padding: 8px;
-        background: white;
-        border-radius: 4px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-}
-
-// 视频预览
-.video-player {
-    width: 100%;
-    max-height: 70vh;
-    background: #000;
-}
-
-// 音频预览
-.audio-preview {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-    min-height: 200px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-
-    .audio-icon {
-        color: white;
-        margin-bottom: 24px;
-    }
-
-    .audio-player {
-        width: 100%;
-        max-width: 400px;
-    }
-}
-
-// PDF 预览
-.pdf-viewer {
-    width: 100%;
-    height: 100%;
-    min-height: 70vh;
 }
 
 // 文本预览
@@ -507,14 +290,103 @@ function onMediaError(event: Event) {
     }
 }
 
-// Office 预览
-.office-preview {
+// 原生媒体播放器（视频/音频）
+.native-media-player {
     height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    padding: 24px;
 
-    .office-viewer {
+    &.video-player {
+        .media-element {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            outline: none;
+            
+            // 自定义播放器控件样式
+            &::-webkit-media-controls-panel {
+                background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+            }
+        }
+    }
+
+    &.audio-player {
+        gap: 24px;
+
+        .audio-cover {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .audio-info {
+            text-align: center;
+            color: #fff;
+
+            .audio-title {
+                margin: 0 0 8px;
+                font-size: 20px;
+                font-weight: 600;
+                max-width: 400px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .audio-size {
+                margin: 0;
+                font-size: 14px;
+                color: rgba(255, 255, 255, 0.6);
+            }
+        }
+
+        .audio-element {
+            width: 100%;
+            max-width: 500px;
+            height: 54px;
+            border-radius: 27px;
+            outline: none;
+            
+            &::-webkit-media-controls-panel {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 27px;
+            }
+        }
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 25px 70px rgba(102, 126, 234, 0.5);
+    }
+}
+
+// kkFileView 预览（用于文档等其他文件）
+.kkfileview-preview {
+    height: 80vh;
+
+    .kkfileview-viewer {
         width: 100%;
         height: 100%;
-        min-height: 70vh;
+        border: none;
     }
 }
 

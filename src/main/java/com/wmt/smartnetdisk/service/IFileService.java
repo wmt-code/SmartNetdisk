@@ -195,6 +195,16 @@ public interface IFileService extends IService<FileInfo> {
     String getPreviewUrl(Long userId, Long fileId, int expiry);
 
     /**
+     * 获取 kkFileView 预览 URL（用于 Office、PDF 等文档）
+     *
+     * @param userId 用户ID
+     * @param fileId 文件ID
+     * @param expiry 有效期（秒）
+     * @return kkFileView 预览页面 URL
+     */
+    String getKkFileViewPreviewUrl(Long userId, Long fileId, int expiry);
+
+    /**
      * 获取文件实体（验证用户权限）
      *
      * @param userId 用户ID

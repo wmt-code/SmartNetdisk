@@ -61,6 +61,10 @@ ai:
     model: Qwen/Qwen2.5-7B-Instruct
     embedding-model: BAAI/bge-large-zh-v1.5
 
+# kkFileView 配置
+kkfileview:
+  base-url: ${KKFILEVIEW_BASE_URL:http://82.158.225.68:40145}
+
 # Sa-Token 配置
 sa-token:
   # token 名称（同时也是 cookie 名称）
