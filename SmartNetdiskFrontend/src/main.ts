@@ -12,6 +12,16 @@ import 'element-plus/es/components/message-box/style/css'
 
 import './styles/main.scss'
 
+// Monaco Editor 配置
+import { loader } from '@guolao/vue-monaco-editor'
+
+// 使用 CDN 加载 Monaco Editor（避免打包体积过大）
+loader.config({
+  paths: {
+    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs'
+  }
+})
+
 const app = createApp(App)
 
 app.use(createPinia())

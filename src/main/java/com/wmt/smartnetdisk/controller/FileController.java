@@ -9,6 +9,7 @@ import com.wmt.smartnetdisk.dto.request.FastUploadDTO;
 import com.wmt.smartnetdisk.dto.request.FileListDTO;
 import com.wmt.smartnetdisk.dto.request.MoveDTO;
 import com.wmt.smartnetdisk.dto.request.RenameDTO;
+import com.wmt.smartnetdisk.dto.request.SaveContentDTO;
 import com.wmt.smartnetdisk.service.IAuthService;
 import com.wmt.smartnetdisk.service.IFileChunkService;
 import com.wmt.smartnetdisk.service.IFileService;
@@ -175,6 +176,27 @@ public class FileController {
         Map<String, String> data = new HashMap<>();
         data.put("url", url);
         return Result.success(data);
+    }
+
+    /**
+     * 获取文件文本内容（用于在线编辑）
+     * 支持的文件类型：txt, md, json, xml, html, css, js, ts, java, py, go, c, cpp, h, yml, yaml, sh, bat, sql 等
+     */
+    @GetMapping("/{id}/content")
+    public Result<Map<String, Object>> getFileContent(@PathVariable("id") Long fileId) {
+        Long userId = authService.getCurrentUserId();
+        Map<String, Object> data = fileService.getFileContent(userId, fileId);
+        return Result.success(data);
+    }
+
+    /**
+     * 保存文件文本内容（在线编辑后保存）
+     */
+    @PutMapping("/{id}/content")
+    public Result<Void> saveFileContent(@PathVariable("id") Long fileId, @Valid @RequestBody SaveContentDTO saveContentDTO) {
+        Long userId = authService.getCurrentUserId();
+        fileService.saveFileContent(userId, fileId, saveContentDTO.getContent());
+        return Result.success("保存成功", null);
     }
 
     // ==================== 文件管理相关 ====================

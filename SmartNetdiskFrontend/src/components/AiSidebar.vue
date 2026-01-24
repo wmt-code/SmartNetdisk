@@ -59,9 +59,9 @@
               <!-- 引用的文件 -->
               <div v-if="msg.references?.length" class="mt-2 pt-2 border-t border-gray-100">
                 <p class="text-xs text-gray-500 mb-1">引用文件:</p>
-                <div v-for="ref in msg.references" :key="ref" 
+                <div v-for="ref in msg.references" :key="ref.fileId || ref.fileName"
                      class="text-xs text-[#7C3AED] cursor-pointer hover:underline">
-                  📄 {{ ref }}
+                  📄 {{ ref.fileName }}
                 </div>
               </div>
             </div>

@@ -262,6 +262,20 @@
       @confirm="confirmCopy"
     />
 
+    <!-- 文件预览对话框 -->
+    <FilePreviewDialog
+      v-model="previewDialogVisible"
+      :file="previewTargetFile"
+      @edit="handleOpenEditor"
+    />
+
+    <!-- 文件编辑器对话框 -->
+    <FileEditorDialog
+      v-model="editorDialogVisible"
+      :file="editorTargetFile"
+      @saved="handleEditorSaved"
+    />
+
     <!-- 右键菜单 -->
     <Teleport to="body">
       <div
@@ -270,19 +284,33 @@
         :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
         @click.stop
       >
-        <div 
+        <div
           v-if="contextMenuTarget?.fileType === 'folder'"
           class="menu-item"
           @click="handleContextMenuAction('open')"
         >
           <el-icon><FolderOpened /></el-icon> 打开
         </div>
+        <div
+          v-if="contextMenuTarget?.fileType !== 'folder'"
+          class="menu-item"
+          @click="handleContextMenuAction('preview')"
+        >
+          <el-icon><View /></el-icon> 预览
+        </div>
+        <div
+          v-if="isEditableFile(contextMenuTarget)"
+          class="menu-item"
+          @click="handleContextMenuAction('edit')"
+        >
+          <el-icon><EditPen /></el-icon> 编辑
+        </div>
         <div class="menu-item" @click="handleContextMenuAction('download')">
           <el-icon><Download /></el-icon> 下载
         </div>
-        <div 
+        <div
           v-if="['pdf', 'doc', 'docx', 'txt', 'md'].includes(contextMenuTarget?.fileExt || '')"
-          class="menu-item" 
+          class="menu-item"
           @click="handleContextMenuAction('vectorize')"
         >
           <el-icon><MagicStick /></el-icon> 智能分析
@@ -314,11 +342,13 @@ import { useRoute } from 'vue-router'
 import {
   HomeFilled, FolderAdd, Upload, Document, Folder, List, Grid,
   Download, Share, Delete, Picture, VideoPlay, Headset, FolderOpened,
-  Loading, Edit, RefreshLeft, Scissor, DocumentCopy, MagicStick
+  Loading, Edit, RefreshLeft, Scissor, DocumentCopy, MagicStick, View, EditPen
 } from '@element-plus/icons-vue'
 import ShareBatchDialog from '@/components/ShareBatchDialog.vue'
 import FolderSelectDialog from '@/components/FolderSelectDialog.vue'
 import UppyUploader from '@/components/UppyUploader.vue'
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
+import FileEditorDialog from '@/components/FileEditorDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getFileList, deleteFile, renameFile, downloadFileStream,
@@ -440,8 +470,8 @@ const handleRowDblClick = (row: FileInfo) => {
     currentPage.value = 1
     loadFileList()
   } else {
-    // 下载文件（使用流式下载确保文件名正确）
-    handleDownload(row)
+    // 打开文件预览
+    handlePreview(row)
   }
 }
 
@@ -485,10 +515,16 @@ const contextMenuTarget = ref<FileInfo | null>(null)
 const handleContextMenuAction = (action: string) => {
   if (!contextMenuTarget.value) return
   const row = contextMenuTarget.value
-  
+
   switch (action) {
     case 'open':
       handleRowDblClick(row)
+      break
+    case 'preview':
+      handlePreview(row)
+      break
+    case 'edit':
+      handleOpenEditor(row)
       break
     case 'download':
       if (row.fileType === 'folder') {
@@ -745,6 +781,47 @@ const handleVectorize = async (row: FileInfo) => {
 const moveDialogVisible = ref(false)
 const copyDialogVisible = ref(false)
 const operationTargetFiles = ref<FileInfo[]>([]) // 当前操作的目标文件列表
+
+// 预览和编辑相关
+const previewDialogVisible = ref(false)
+const previewTargetFile = ref<FileInfo | null>(null)
+const editorDialogVisible = ref(false)
+const editorTargetFile = ref<FileInfo | null>(null)
+
+// 可编辑的文件扩展名
+const EDITABLE_EXTENSIONS = [
+  'txt', 'md', 'markdown', 'log',
+  'json', 'xml', 'yml', 'yaml', 'toml', 'ini', 'conf', 'cfg', 'properties',
+  'html', 'htm', 'css', 'scss', 'sass', 'less', 'js', 'ts', 'jsx', 'tsx', 'vue', 'svelte',
+  'java', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'hpp', 'cs', 'rb', 'php', 'swift', 'kt', 'kts',
+  'scala', 'groovy', 'r', 'lua', 'pl', 'pm', 'sh', 'bash', 'zsh', 'fish', 'bat', 'cmd', 'ps1',
+  'sql', 'gitignore', 'dockerignore', 'editorconfig', 'env'
+]
+
+// 判断文件是否可编辑
+const isEditableFile = (file: FileInfo | null): boolean => {
+  if (!file) return false
+  const ext = file.fileExt?.toLowerCase() || ''
+  return EDITABLE_EXTENSIONS.includes(ext)
+}
+
+// 打开预览
+const handlePreview = (row: FileInfo) => {
+  previewTargetFile.value = row
+  previewDialogVisible.value = true
+}
+
+// 打开编辑器
+const handleOpenEditor = (row: FileInfo) => {
+  editorTargetFile.value = row
+  editorDialogVisible.value = true
+  previewDialogVisible.value = false // 关闭预览（如果从预览打开编辑）
+}
+
+// 编辑器保存后的回调
+const handleEditorSaved = () => {
+  loadFileList() // 刷新文件列表（文件大小可能变化）
+}
 
 // 单文件/文件夹 移动/复制
 const handleMove = (row: FileInfo) => {

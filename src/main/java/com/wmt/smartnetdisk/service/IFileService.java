@@ -202,4 +202,22 @@ public interface IFileService extends IService<FileInfo> {
      * @return 文件实体
      */
     FileInfo getFileWithPermission(Long userId, Long fileId);
+
+    /**
+     * 获取文件文本内容（用于在线编辑）
+     *
+     * @param userId 用户ID
+     * @param fileId 文件ID
+     * @return 包含文件内容和元信息的 Map
+     */
+    java.util.Map<String, Object> getFileContent(Long userId, Long fileId);
+
+    /**
+     * 保存文件文本内容（在线编辑后保存）
+     *
+     * @param userId  用户ID
+     * @param fileId  文件ID
+     * @param content 文件内容
+     */
+    void saveFileContent(Long userId, Long fileId, String content);
 }

@@ -506,4 +506,29 @@ public class MinioUtils {
             throw new BusinessException(ResultCode.CHUNK_MERGE_FAIL, "分片合并失败");
         }
     }
+
+    /**
+     * 上传文件内容（字节数组）
+     *
+     * @param content     文件内容
+     * @param storagePath 存储路径
+     * @param contentType 内容类型
+     */
+    public void uploadContent(byte[] content, String storagePath, String contentType) {
+        ensureBucketExists(minioConfig.getBucketName());
+
+        try (java.io.ByteArrayInputStream inputStream = new java.io.ByteArrayInputStream(content)) {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(minioConfig.getBucketName())
+                            .object(storagePath)
+                            .stream(inputStream, content.length, -1)
+                            .contentType(contentType)
+                            .build());
+            log.info("文件内容上传成功: path={}, size={}", storagePath, content.length);
+        } catch (Exception e) {
+            log.error("文件内容上传失败: {}", storagePath, e);
+            throw new BusinessException(ResultCode.FILE_UPLOAD_FAIL, "保存文件失败");
+        }
+    }
 }

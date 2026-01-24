@@ -228,6 +228,32 @@ export async function getPreviewUrl(fileId: number): Promise<string> {
 }
 
 /**
+ * 文件内容响应
+ */
+export interface FileContentResponse {
+    content: string
+    fileName: string
+    fileExt: string
+    fileSize: number
+    mimeType: string
+}
+
+/**
+ * 获取文件文本内容（用于在线编辑）
+ */
+export async function getFileContent(fileId: number): Promise<FileContentResponse> {
+    const res = await api.get<unknown, ApiResponse<FileContentResponse>>(`/file/${fileId}/content`)
+    return res.data
+}
+
+/**
+ * 保存文件文本内容
+ */
+export async function saveFileContent(fileId: number, content: string): Promise<void> {
+    await api.put<unknown, ApiResponse<void>>(`/file/${fileId}/content`, { content })
+}
+
+/**
  * 重命名文件
  */
 export async function renameFile(fileId: number, newName: string): Promise<void> {

@@ -574,4 +574,124 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         }
         return fileInfo;
     }
+
+    /**
+     * 支持在线编辑的文件扩展名
+     */
+    private static final java.util.Set<String> EDITABLE_EXTENSIONS = java.util.Set.of(
+            // 文本文件
+            "txt", "md", "markdown", "log",
+            // 配置文件
+            "json", "xml", "yml", "yaml", "toml", "ini", "conf", "cfg", "properties",
+            // Web 相关
+            "html", "htm", "css", "scss", "sass", "less", "js", "ts", "jsx", "tsx", "vue", "svelte",
+            // 编程语言
+            "java", "py", "go", "rs", "c", "cpp", "h", "hpp", "cs", "rb", "php", "swift", "kt", "kts",
+            "scala", "groovy", "r", "lua", "pl", "pm", "sh", "bash", "zsh", "fish", "bat", "cmd", "ps1",
+            // 数据库
+            "sql",
+            // 其他
+            "gitignore", "dockerignore", "editorconfig", "env"
+    );
+
+    /**
+     * 最大可编辑文件大小：10MB
+     */
+    private static final long MAX_EDITABLE_SIZE = 10 * 1024 * 1024;
+
+    @Override
+    public java.util.Map<String, Object> getFileContent(Long userId, Long fileId) {
+        FileInfo fileInfo = getFileWithPermission(userId, fileId);
+
+        // 检查文件扩展名是否支持编辑
+        String ext = fileInfo.getFileExt() != null ? fileInfo.getFileExt().toLowerCase() : "";
+        if (!EDITABLE_EXTENSIONS.contains(ext)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "不支持编辑此类型文件");
+        }
+
+        // 检查文件大小
+        if (fileInfo.getFileSize() > MAX_EDITABLE_SIZE) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "文件过大，无法在线编辑（最大10MB）");
+        }
+
+        // 读取文件内容
+        try (java.io.InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath())) {
+            String content = new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("content", content);
+            result.put("fileName", fileInfo.getFileName());
+            result.put("fileExt", fileInfo.getFileExt());
+            result.put("fileSize", fileInfo.getFileSize());
+            result.put("mimeType", fileInfo.getMimeType());
+            return result;
+        } catch (java.io.IOException e) {
+            log.error("读取文件内容失败: fileId={}", fileId, e);
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND, "读取文件失败");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveFileContent(Long userId, Long fileId, String content) {
+        FileInfo fileInfo = getFileWithPermission(userId, fileId);
+
+        // 检查文件扩展名是否支持编辑
+        String ext = fileInfo.getFileExt() != null ? fileInfo.getFileExt().toLowerCase() : "";
+        if (!EDITABLE_EXTENSIONS.contains(ext)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "不支持编辑此类型文件");
+        }
+
+        // 将内容转换为字节数组
+        byte[] contentBytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        long newSize = contentBytes.length;
+        long oldSize = fileInfo.getFileSize();
+        long sizeDiff = newSize - oldSize;
+
+        // 检查用户空间是否足够
+        if (sizeDiff > 0) {
+            User user = userService.getById(userId);
+            if (user.getUsedSpace() + sizeDiff > user.getTotalSpace()) {
+                throw new BusinessException(ResultCode.FILE_SIZE_EXCEED, "存储空间不足");
+            }
+        }
+
+        // 上传新内容到 MinIO（覆盖原文件）
+        String mimeType = fileInfo.getMimeType();
+        if (mimeType == null || mimeType.isBlank()) {
+            mimeType = "text/plain; charset=utf-8";
+        }
+        minioUtils.uploadContent(contentBytes, fileInfo.getStoragePath(), mimeType);
+
+        // 更新文件记录
+        fileInfo.setFileSize(newSize);
+        // 计算新的 MD5
+        String newMd5 = calculateMd5(contentBytes);
+        fileInfo.setFileMd5(newMd5);
+        updateById(fileInfo);
+
+        // 更新用户已用空间
+        if (sizeDiff != 0) {
+            userService.updateUsedSpace(userId, sizeDiff);
+        }
+
+        log.info("文件内容保存成功: fileId={}, oldSize={}, newSize={}", fileId, oldSize, newSize);
+    }
+
+    /**
+     * 计算字节数组的 MD5 值
+     */
+    private String calculateMd5(byte[] content) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(content);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new BusinessException(ResultCode.DATA_UPDATE_FAIL, "MD5计算失败");
+        }
+    }
 }
