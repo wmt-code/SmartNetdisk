@@ -39,6 +39,17 @@ public class FolderController {
     }
 
     /**
+     * 按路径创建文件夹 (用于文件夹上传)
+     */
+    @PostMapping("/path")
+    public Result<Long> createFolderPath(
+            @Valid @RequestBody com.wmt.smartnetdisk.dto.request.CreateFolderPathDTO createPathDTO) {
+        Long userId = authService.getCurrentUserId();
+        Long folderId = folderService.createFolderPath(userId, createPathDTO);
+        return Result.success(folderId);
+    }
+
+    /**
      * 获取文件夹详情
      */
     @GetMapping("/{id}")

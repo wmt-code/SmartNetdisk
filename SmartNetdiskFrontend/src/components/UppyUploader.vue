@@ -64,11 +64,13 @@ function initUppy() {
     height: 450,
     hideProgressDetails: false, // 启用详细进度显示（上传速度、剩余时间）
     proudlyDisplayPoweredByUppy: false,
-    note: '支持拖拽上传、秒传、断点续传，单文件最大 10GB',
+    note: '支持拖拽上传文件或文件夹、秒传、断点续传，单文件最大 10GB',
     hideUploadButton: false,
     showRemoveButtonAfterComplete: true,
     singleFileFullScreen: true, // 单文件时全屏预览
     showSelectedFiles: true, // 显示已选文件列表
+    // 启用文件夹上传
+    fileManagerSelectionType: 'both', // 允许选择文件和文件夹
     doneButtonHandler: () => {
       emit('close')
     },

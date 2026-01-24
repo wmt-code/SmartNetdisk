@@ -61,12 +61,65 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
     private preprocessor = async (fileIDs: string[]) => {
         console.log('[SmartUpload] 预处理开始，文件数量:', fileIDs.length)
 
-        const promises = fileIDs.map(async (fileID) => {
+        // 缓存已创建的文件夹路径 -> ID Promise，避免重复请求
+        const folderCache = new Map<string, Promise<number>>()
+
+        // 并发控制函数
+        const processFile = async (fileID: string) => {
             const file = this.uppy.getFile(fileID)
             if (!file?.data) return
 
             const fileData = file.data as File
-            console.log('[SmartUpload] 开始处理文件:', file.name, '大小:', fileData.size)
+            const meta = file.meta as any
+            const relativePath = meta.relativePath as string
+
+            console.log('[SmartUpload] 开始处理文件:', file.name, {
+                size: fileData.size,
+                relativePath
+            })
+
+            // 0. 确定目标文件夹ID
+            let targetFolderId = this.folderId
+
+            // 如果是文件夹上传，计算并获取/创建目标文件夹
+            if (relativePath && relativePath.includes('/')) {
+                const lastSlashIndex = relativePath.lastIndexOf('/')
+                if (lastSlashIndex > 0) {
+                    const folderPath = relativePath.substring(0, lastSlashIndex)
+
+                    // 检查缓存
+                    let folderPromise = folderCache.get(folderPath)
+
+                    if (!folderPromise) {
+                        // 如果没有进行中的请求，创建一个新的 Promise
+                        folderPromise = (async () => {
+                            try {
+                                // 动态导入避免循环依赖
+                                const { createFolderPath } = await import('@/api/file')
+                                const id = await createFolderPath(folderPath, this.folderId)
+                                console.log('[SmartUpload] 文件夹就绪(新创建):', folderPath, 'ID:', id)
+                                return id
+                            } catch (error) {
+                                console.error('[SmartUpload] 创建文件夹结构失败:', error)
+                                throw error
+                            }
+                        })()
+
+                        // 存入缓存
+                        folderCache.set(folderPath, folderPromise)
+                    }
+
+                    try {
+                        // 等待结果
+                        targetFolderId = await folderPromise
+                    } catch (error) {
+                        // 如果创建失败，可能需要重试策略或者简单的错误处理
+                        // 这里简单处理：如果失败，从缓存移除，让后续请求重试（或者直接失败）
+                        folderCache.delete(folderPath)
+                        console.error('[SmartUpload] 等待文件夹创建失败:', error)
+                    }
+                }
+            }
 
             // 1. 计算 MD5
             this.uppy.emit('preprocess-progress', file, {
@@ -82,7 +135,6 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
                     value: percent / 100
                 })
             })
-            console.log('[SmartUpload] MD5 计算完成:', fileMd5)
 
             // 2. 检测秒传
             this.uppy.emit('preprocess-progress', file, {
@@ -94,27 +146,33 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
                 fileMd5,
                 fileName: file.name,
                 fileSize: fileData.size,
-                folderId: this.folderId
-            })
-            console.log('[SmartUpload] 秒传检测结果:', {
-                fastUploaded: checkResult.fastUploaded,
-                uploadedChunks: checkResult.uploadedChunks?.length || 0,
-                hasUploadResult: !!checkResult.uploadResult
+                folderId: targetFolderId
             })
 
-            // 3. 更新文件 meta
+            // 3. 更新文件 meta (一次性更新)
             this.uppy.setFileMeta(fileID, {
                 fileMd5,
-                folderId: this.folderId,
+                folderId: targetFolderId,
                 fastUploaded: checkResult.fastUploaded,
                 uploadResult: checkResult.uploadResult,
                 uploadedChunks: checkResult.uploadedChunks
             } as SmartUploadMeta)
 
             this.uppy.emit('preprocess-complete', file)
+        }
+
+        // 简单的并发限制 (Concurrency Limit = 3)
+        // 既能加快速度，又能避免瞬间发起过多请求导致卡顿
+        const CONCURRENT_LIMIT = 3
+        const queue = [...fileIDs]
+        const workers = Array(Math.min(fileIDs.length, CONCURRENT_LIMIT)).fill(null).map(async () => {
+            while (queue.length > 0) {
+                const fileID = queue.shift()
+                if (fileID) await processFile(fileID)
+            }
         })
 
-        await Promise.all(promises)
+        await Promise.all(workers)
         console.log('[SmartUpload] 预处理完成')
     }
 

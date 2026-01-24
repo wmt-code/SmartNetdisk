@@ -25,6 +25,15 @@ public interface IFolderService extends IService<Folder> {
     FolderVO createFolder(Long userId, CreateFolderDTO createDTO);
 
     /**
+     * 按路径创建文件夹 (如果由于并发导致已存在则直接返回)
+     *
+     * @param userId        用户ID
+     * @param createPathDTO 创建请求
+     * @return 最终的文件夹ID
+     */
+    Long createFolderPath(Long userId, com.wmt.smartnetdisk.dto.request.CreateFolderPathDTO createPathDTO);
+
+    /**
      * 获取文件夹详情
      *
      * @param userId   用户ID

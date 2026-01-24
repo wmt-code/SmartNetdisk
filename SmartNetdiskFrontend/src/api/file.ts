@@ -346,6 +346,14 @@ export async function createFolder(folderName: string, parentId: number = 0): Pr
 }
 
 /**
+ * 按路径创建文件夹
+ */
+export async function createFolderPath(path: string, parentId: number = 0): Promise<number> {
+    const res = await api.post<unknown, ApiResponse<number>>('/folder/path', { path, parentId })
+    return res.data
+}
+
+/**
  * 获取文件夹详情
  */
 export async function getFolderDetail(folderId: number): Promise<FolderInfo> {

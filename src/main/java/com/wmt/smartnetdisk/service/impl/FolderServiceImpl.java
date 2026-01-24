@@ -32,6 +32,59 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public Long createFolderPath(Long userId, com.wmt.smartnetdisk.dto.request.CreateFolderPathDTO createPathDTO) {
+        String path = createPathDTO.getPath();
+        Long parentId = createPathDTO.getParentId();
+
+        // 统一分隔符
+        path = path.replace("\\", "/");
+        if (path.startsWith("/"))
+            path = path.substring(1);
+        if (path.endsWith("/"))
+            path = path.substring(0, path.length() - 1);
+
+        String[] folderNames = path.split("/");
+        Long currentParentId = parentId;
+
+        for (String folderName : folderNames) {
+            if (folderName.isEmpty())
+                continue;
+
+            // 检查文件夹是否存在
+            LambdaQueryWrapper<Folder> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(Folder::getUserId, userId)
+                    .eq(Folder::getParentId, currentParentId)
+                    .eq(Folder::getFolderName, folderName)
+                    .eq(Folder::getDeleted, 0);
+
+            Folder folder = getOne(wrapper);
+
+            if (folder == null) {
+                // 不存在则创建
+                folder = new Folder();
+                folder.setUserId(userId);
+                folder.setParentId(currentParentId);
+                folder.setFolderName(folderName);
+
+                try {
+                    save(folder);
+                } catch (Exception e) {
+                    // 并发情况下可能已存在，尝试再次查询
+                    folder = getOne(wrapper);
+                    if (folder == null) {
+                        throw new BusinessException(ResultCode.BAD_REQUEST, "创建文件夹失败");
+                    }
+                }
+            }
+
+            currentParentId = folder.getId();
+        }
+
+        return currentParentId;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public FolderVO createFolder(Long userId, CreateFolderDTO createDTO) {
         // 检查父文件夹是否存在
         if (createDTO.getParentId() != 0) {

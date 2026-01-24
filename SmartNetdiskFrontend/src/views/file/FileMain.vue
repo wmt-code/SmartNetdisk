@@ -563,10 +563,10 @@ const triggerFolderUpload = () => {
   uploadDialogVisible.value = true
 }
 
-// Uppy 上传关闭处理
+// Uppy 上传关闭处理（不刷新列表）
 const handleUploadClose = () => {
   uploadDialogVisible.value = false
-  loadFileList()
+  // 注：不在关闭时刷新列表，只在上传成功时刷新
 }
 
 // Uppy 上传成功处理
