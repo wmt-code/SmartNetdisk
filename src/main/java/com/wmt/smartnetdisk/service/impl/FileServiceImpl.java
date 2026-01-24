@@ -431,6 +431,26 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void clearRecycleBin(Long userId) {
+        // 1. 获取所有已删除的文件（deleted=1）
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId)
+                .eq(FileInfo::getDeleted, 1);
+        List<FileInfo> recycledFiles = list(wrapper);
+
+        // 2. 彻底删除文件
+        for (FileInfo file : recycledFiles) {
+            permanentDeleteFile(userId, file.getId());
+        }
+
+        // 3. 清空文件夹回收站
+        folderService.clearRecycleBin(userId);
+
+        log.info("回收站清空成功: userId={}, fileCount={}", userId, recycledFiles.size());
+    }
+
+    @Override
     public FileVO toVO(FileInfo fileInfo) {
         if (fileInfo == null) {
             return null;

@@ -153,9 +153,12 @@ const activeMenu = computed(() => {
 
 // 搜索处理
 function handleSearch() {
-  if (searchQuery.value.trim()) {
-    console.log('搜索:', searchQuery.value)
-    // TODO: 实现搜索功能
+  const keyword = searchQuery.value.trim()
+  if (keyword) {
+    router.push({ path: '/files', query: { keyword } })
+  } else {
+    // 如果清空搜索，回到全部文件
+    router.push({ path: '/files' })
   }
 }
 

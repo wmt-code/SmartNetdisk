@@ -23,6 +23,12 @@
       </div>
 
       <div class="right flex items-center gap-2">
+        <!-- 清空回收站按钮 -->
+        <el-button v-if="isRecycleBin" type="danger" plain @click="handleEmptyRecycleBin">
+          <el-icon><Delete /></el-icon>
+          清空回收站
+        </el-button>
+
         <!-- 新建文件夹 -->
         <el-button v-if="!isRecycleBin" @click="showNewFolderDialog = true">
           <el-icon><FolderAdd /></el-icon>
@@ -276,6 +282,14 @@
       @saved="handleEditorSaved"
     />
 
+    <!-- 批量操作进度对话框 -->
+    <BatchProgressDialog
+      v-model="progressVisible"
+      title="正在处理"
+      :percentage="progressPercentage"
+      :status-text="progressStatus"
+    />
+
     <!-- 右键菜单 -->
     <Teleport to="body">
       <div
@@ -338,11 +352,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   HomeFilled, FolderAdd, Upload, Document, Folder, List, Grid,
   Download, Share, Delete, Picture, VideoPlay, Headset, FolderOpened,
-  Loading, Edit, RefreshLeft, Scissor, DocumentCopy, MagicStick, View, EditPen
+  Loading, Edit, RefreshLeft, Scissor, DocumentCopy, MagicStick, View, EditPen,
+  Sort, Check, Files, UploadFilled, CollectionTag
 } from '@element-plus/icons-vue'
 import ShareBatchDialog from '@/components/ShareBatchDialog.vue'
 import FolderSelectDialog from '@/components/FolderSelectDialog.vue'
@@ -361,6 +376,7 @@ import { vectorizeFile } from '@/api/ai'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 
 // 视图模式
@@ -371,13 +387,92 @@ const loading = ref(false)
 const creating = ref(false)
 const renaming = ref(false)
 
+// 拖拽上传状态
+const isDragging = ref(false)
+
 // 分页
 const currentPage = ref(1)
 const pageSize = ref(20)
-const total = ref(0)
+const total = ref(0) // 总条数 (注意：后端可能没返回准确的 total，需要确认 PageResult 结构)
 
 // 当前文件夹 ID
 const currentFolderId = ref(0)
+
+// 排序和搜索
+const sortField = ref('time')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const searchKeyword = ref('')
+
+// 判断是否是回收站 (must be defined before loadFileList)
+const isRecycleBin = computed(() => route.meta?.isRecycle === true)
+
+// 排序处理
+const handleSort = (command: string) => {
+  if (command === 'toggleOrder') {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortField.value = command
+  }
+  loadFileList()
+}
+
+// 搜索清除
+const clearSearch = () => {
+  router.push({ query: {} })
+}
+
+// 高亮搜索关键词
+const highlightKeyword = (text: string) => {
+  if (!searchKeyword.value) return text
+  const regex = new RegExp(`(${searchKeyword.value})`, 'gi')
+  return text.replace(regex, '<span class="text-red-500 font-bold">$1</span>')
+}
+
+// 加载文件列表
+const loadFileList = async () => {
+  loading.value = true
+  try {
+    const params: any = {
+      folderId: currentFolderId.value,
+      pageNum: currentPage.value,
+      pageSize: pageSize.value,
+      orderBy: sortField.value === 'name' ? 'file_name' : (sortField.value === 'size' ? 'file_size' : 'create_time'),
+      isAsc: sortOrder.value === 'asc',
+      keyword: searchKeyword.value
+    }
+    
+    // 如果有搜索关键词，则不传 folderId (全局搜索)
+    if (searchKeyword.value) {
+        delete params.folderId
+    }
+
+    let res
+    if (isRecycleBin.value) {
+      res = await getRecycleList(params)
+    } else {
+      res = await getFileList(params)
+    }
+
+    fileList.value = res.records
+    total.value = res.total
+    
+    if (!searchKeyword.value && !isRecycleBin.value && route.params.path) {
+         // TODO: 真正的面包屑加载逻辑
+         // 这里简单因为没有 updateBreadcrumb 函数体，保持原有逻辑或忽略
+    }
+  } catch (error) {
+    console.error('加载文件列表失败:', error)
+    ElMessage.error('加载文件列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 监听路由变化（搜索关键词）
+watch(() => route.query.keyword, (newVal) => {
+  searchKeyword.value = (newVal as string) || ''
+  loadFileList()
+}, { immediate: true })
 
 // 新建文件夹
 const showNewFolderDialog = ref(false)
@@ -390,6 +485,7 @@ const renameTargetFile = ref<FileInfo | null>(null)
 
 // 上传相关
 const uploadDialogVisible = ref(false)
+const uppyRef = ref()
 
 // 选中的文件
 const selectedFiles = ref<FileInfo[]>([])
@@ -399,9 +495,6 @@ const fileList = ref<FileInfo[]>([])
 
 // 文件夹路径（用于面包屑导航）
 const folderPath = ref<{ id: number; name: string }[]>([])
-
-// 判断是否是回收站
-const isRecycleBin = computed(() => route.meta?.isRecycle === true)
 
 // 文件图标
 const getFileIcon = (type: string) => {
@@ -432,28 +525,36 @@ const formatTime = (time: string) => {
   return time.replace('T', ' ').substring(0, 16)
 }
 
-// 加载文件列表
-async function loadFileList() {
-  loading.value = true
-  try {
-    // 根据是否是回收站选择不同的 API
-    const result = isRecycleBin.value
-      ? await getRecycleList({
-          pageNum: currentPage.value,
-          pageSize: pageSize.value
-        })
-      : await getFileList({
-          folderId: currentFolderId.value,
-          pageNum: currentPage.value,
-          pageSize: pageSize.value,
-          fileType: route.meta?.fileType as string | undefined
-        })
-    fileList.value = result.records
-    total.value = result.total
-  } catch (error) {
-    console.error('加载文件列表失败:', error)
-  } finally {
-    loading.value = false
+
+
+// 拖拽处理
+const handleDragOver = (e: DragEvent) => {
+  isDragging.value = true
+}
+
+const handleDragLeave = (e: DragEvent) => {
+  // 防止在子元素上触发 leave 导致闪烁，检查 relatedTarget
+  const relatedTarget = e.relatedTarget as HTMLElement
+  if (!relatedTarget || !e.currentTarget || !(e.currentTarget as HTMLElement).contains(relatedTarget)) {
+    isDragging.value = false
+  }
+}
+
+const handleDrop = (e: DragEvent) => {
+  isDragging.value = false
+  const files = e.dataTransfer?.files
+  if (files && files.length > 0) {
+    if (!uppyRef.value) {
+      // 如果 uppy ref 不存在，先打开对话框
+      uploadDialogVisible.value = true
+      // 等待 DOM 更新后添加文件
+      setTimeout(() => {
+        uppyRef.value?.addFiles(files)
+      }, 100)
+    } else {
+      uploadDialogVisible.value = true
+      uppyRef.value.addFiles(files)
+    }
   }
 }
 
@@ -896,98 +997,7 @@ const handleBatchDelete = async () => {
   }
 }
 
-// 批量恢复（回收站）
-const handleBatchRestore = async () => {
-  if (selectedFiles.value.length === 0) return
 
-  try {
-    await ElMessageBox.confirm(
-      `确定要恢复选中的 ${selectedFiles.value.length} 个文件/文件夹吗？`,
-      '批量恢复',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'info'
-      }
-    )
-
-    // 分离文件和文件夹
-    const files = selectedFiles.value.filter(f => f.fileType !== 'folder')
-    const folders = selectedFiles.value.filter(f => f.fileType === 'folder')
-
-    // 恢复文件
-    if (files.length > 0) {
-      const { restoreFile } = await import('@/api/file')
-      for (const file of files) {
-        await restoreFile(file.id)
-      }
-    }
-
-    // 恢复文件夹
-    if (folders.length > 0) {
-      const { restoreFolder } = await import('@/api/file')
-      for (const folder of folders) {
-        await restoreFolder(folder.id)
-      }
-    }
-
-    ElMessage.success('批量恢复成功')
-    await loadFileList()
-    selectedFiles.value = [] // 清空选中
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('批量恢复失败:', error)
-      ElMessage.error('批量恢复失败，请稍后重试')
-    }
-  }
-}
-
-// 批量彻底删除（回收站）
-const handleBatchPermanentDelete = async () => {
-  if (selectedFiles.value.length === 0) return
-
-  try {
-    await ElMessageBox.confirm(
-      `确定要彻底删除选中的 ${selectedFiles.value.length} 个文件/文件夹吗？此操作不可恢复！`,
-      '批量彻底删除',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'error'
-      }
-    )
-
-    // 分离文件和文件夹
-    const files = selectedFiles.value.filter(f => f.fileType !== 'folder')
-    const folders = selectedFiles.value.filter(f => f.fileType === 'folder')
-
-    // 彻底删除文件
-    if (files.length > 0) {
-      const { permanentDeleteFile } = await import('@/api/file')
-      for (const file of files) {
-        await permanentDeleteFile(file.id)
-        userStore.updateUsedSpace(-file.fileSize)
-      }
-    }
-
-    // 彻底删除文件夹
-    if (folders.length > 0) {
-      const { permanentDeleteFolder } = await import('@/api/file')
-      for (const folder of folders) {
-        await permanentDeleteFolder(folder.id)
-      }
-    }
-
-    ElMessage.success('批量彻底删除成功')
-    await loadFileList()
-    selectedFiles.value = [] // 清空选中
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('批量彻底删除失败:', error)
-      ElMessage.error('批量彻底删除失败，请稍后重试')
-    }
-  }
-}
 
 // 执行移动
 const confirmMove = async (targetFolderId: number) => {
@@ -1032,6 +1042,135 @@ const confirmCopy = async (targetFolderId: number) => {
     await loadFileList()
   } catch (error) {
     console.error('复制失败:', error)
+  }
+}
+
+// 批量进度相关
+import BatchProgressDialog from '@/components/BatchProgressDialog.vue'
+const progressVisible = ref(false)
+const progressPercentage = ref(0)
+const progressStatus = ref('')
+
+// 清空回收站
+const handleEmptyRecycleBin = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要清空回收站吗？所有文件将无法恢复！',
+      '清空回收站',
+      {
+        confirmButtonText: '清空',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    loading.value = true
+    const { clearRecycleBin } = await import('@/api/file')
+    await clearRecycleBin()
+    ElMessage.success('回收站已清空')
+    await loadFileList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('清空回收站失败:', error)
+      ElMessage.error('清空回收站失败，请稍后重试')
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+// 带进度的批量操作处理函数
+const processBatchOperation = async (
+  items: FileInfo[], 
+  operationName: string, 
+  processItem: (item: FileInfo) => Promise<void>
+) => {
+  if (items.length === 0) return
+
+  progressVisible.value = true
+  progressPercentage.value = 0
+  progressStatus.value = `正在${operationName} 0/${items.length}`
+  
+  let successCount = 0
+  let failCount = 0
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (!item) continue; // TS safety check
+
+    try {
+      await processItem(item)
+      successCount++
+    } catch (error) {
+      console.error(`${operationName}失败:`, item.fileName, error)
+      failCount++
+    }
+    
+    progressPercentage.value = Math.round(((i + 1) / items.length) * 100)
+    progressStatus.value = `正在${operationName} ${i + 1}/${items.length}`
+  }
+
+  // 稍微延迟关闭以展示 100% 状态
+  setTimeout(() => {
+    progressVisible.value = false
+    if (failCount > 0) {
+      ElMessage.warning(`${operationName}完成: ${successCount} 个成功, ${failCount} 个失败`)
+    } else {
+      ElMessage.success(`${operationName}成功`)
+    }
+    loadFileList()
+    selectedFiles.value = [] // 清空选中
+  }, 500)
+}
+
+// 批量恢复（回收站） - 使用进度条
+const handleBatchRestore = async () => {
+  if (selectedFiles.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要恢复选中的 ${selectedFiles.value.length} 个文件/文件夹吗？`,
+      '批量恢复',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' }
+    )
+
+    const { restoreFile, restoreFolder } = await import('@/api/file')
+
+    await processBatchOperation(selectedFiles.value, '恢复', async (item) => {
+      if (item.fileType === 'folder') {
+        await restoreFolder(item.id)
+      } else {
+        await restoreFile(item.id)
+      }
+    })
+  } catch (error) {
+    if (error !== 'cancel') console.error('取消批量恢复')
+  }
+}
+
+// 批量彻底删除（回收站） - 使用进度条
+const handleBatchPermanentDelete = async () => {
+  if (selectedFiles.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要彻底删除选中的 ${selectedFiles.value.length} 个文件/文件夹吗？此操作不可恢复！`,
+      '批量彻底删除',
+      { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'error' }
+    )
+
+    const { permanentDeleteFile, permanentDeleteFolder } = await import('@/api/file')
+
+    await processBatchOperation(selectedFiles.value, '删除', async (item) => {
+      if (item.fileType === 'folder') {
+        await permanentDeleteFolder(item.id)
+      } else {
+        await permanentDeleteFile(item.id)
+        userStore.updateUsedSpace(-item.fileSize)
+      }
+    })
+  } catch (error) {
+    if (error !== 'cancel') console.error('取消批量彻底删除')
   }
 }
 </script>

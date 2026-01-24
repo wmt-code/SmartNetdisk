@@ -137,6 +137,13 @@ public interface IFileService extends IService<FileInfo> {
     PageResult<FileVO> listRecycledFiles(Long userId, FileListDTO listDTO);
 
     /**
+     * 清空回收站
+     *
+     * @param userId 用户ID
+     */
+    void clearRecycleBin(Long userId);
+
+    /**
      * 将文件实体转换为视图对象
      *
      * @param fileInfo 文件实体

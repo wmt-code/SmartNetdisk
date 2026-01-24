@@ -30,6 +30,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> implements IFolderService {
 
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.wmt.smartnetdisk.service.IFileService fileService;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createFolderPath(Long userId, com.wmt.smartnetdisk.dto.request.CreateFolderPathDTO createPathDTO) {
@@ -190,10 +194,52 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
         if (folder == null || !folder.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FOLDER_NOT_FOUND);
         }
-        // 彻底删除（物理删除）
-        removeById(folderId);
+        // 递归删除子文件夹和文件
+        recursivePermanentDelete(userId, folderId);
         log.info("文件夹彻底删除成功: folderId={}, folderName={}", folderId, folder.getFolderName());
-        // TODO: 递归删除子文件夹和文件
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void clearRecycleBin(Long userId) {
+        // 查询所有已删除的文件夹
+        LambdaQueryWrapper<Folder> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Folder::getUserId, userId)
+                .eq(Folder::getDeleted, 1);
+        List<Folder> recycledFolders = list(wrapper);
+
+        for (Folder folder : recycledFolders) {
+            // 递归彻底删除（包括子文件夹和文件）
+            recursivePermanentDelete(userId, folder.getId());
+        }
+        log.info("回收站文件夹清空成功: userId={}, count={}", userId, recycledFolders.size());
+    }
+
+    /**
+     * 递归彻底删除文件夹及其内容
+     */
+    private void recursivePermanentDelete(Long userId, Long folderId) {
+        // 1. 删除当前文件夹下的所有文件
+        List<com.wmt.smartnetdisk.entity.FileInfo> files = fileService.list(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.wmt.smartnetdisk.entity.FileInfo>()
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getUserId, userId)
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getFolderId, folderId));
+
+        for (com.wmt.smartnetdisk.entity.FileInfo file : files) {
+            fileService.permanentDeleteFile(userId, file.getId());
+        }
+
+        // 2. 递归删除子文件夹
+        List<Folder> children = list(new LambdaQueryWrapper<Folder>()
+                .eq(Folder::getUserId, userId)
+                .eq(Folder::getParentId, folderId));
+
+        for (Folder child : children) {
+            recursivePermanentDelete(userId, child.getId());
+        }
+
+        // 3. 删除当前文件夹
+        removeById(folderId);
     }
 
     @Override

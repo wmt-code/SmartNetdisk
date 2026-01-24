@@ -184,6 +184,29 @@ onMounted(() => {
   initUppy()
 })
 
+// 暴露给父组件的方法
+const addFiles = (files: FileList | File[]) => {
+  if (!uppy) return
+  
+  Array.from(files).forEach((file) => {
+    try {
+      uppy?.addFile({
+        source: 'DragDrop',
+        name: file.name,
+        type: file.type,
+        data: file,
+      })
+    } catch (err) {
+      // 忽略重复添加文件的错误
+      console.warn('File addition skipped:', err)
+    }
+  })
+}
+
+defineExpose({
+  addFiles
+})
+
 onBeforeUnmount(() => {
   destroyUppy()
 })

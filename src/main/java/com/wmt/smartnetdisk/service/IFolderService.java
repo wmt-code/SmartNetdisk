@@ -76,6 +76,13 @@ public interface IFolderService extends IService<Folder> {
     void permanentDeleteFolder(Long userId, Long folderId);
 
     /**
+     * 清空回收站
+     *
+     * @param userId 用户ID
+     */
+    void clearRecycleBin(Long userId);
+
+    /**
      * 获取文件夹树
      *
      * @param userId 用户ID

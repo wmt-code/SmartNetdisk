@@ -394,6 +394,16 @@ public class FileController {
     }
 
     /**
+     * 清空回收站
+     */
+    @DeleteMapping("/recycle")
+    public Result<Void> clearRecycleBin() {
+        Long userId = authService.getCurrentUserId();
+        fileService.clearRecycleBin(userId);
+        return Result.success("回收站已清空", null);
+    }
+
+    /**
      * 批量删除
      */
     @PostMapping("/batch/delete")

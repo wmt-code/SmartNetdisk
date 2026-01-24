@@ -309,7 +309,7 @@ export async function restoreFile(fileId: number): Promise<void> {
  * 批量删除文件
  */
 export async function batchDeleteFiles(fileIds: number[]): Promise<void> {
-    await api.post<unknown, ApiResponse<void>>('/file/batch/delete', fileIds)
+    await api.post<unknown, ApiResponse<void>>('/file/batch/delete', fileIds, { timeout: 0 })
 }
 
 /**
@@ -372,7 +372,7 @@ export async function renameFolder(folderId: number, newName: string): Promise<v
  * 删除文件夹
  */
 export async function deleteFolder(folderId: number): Promise<void> {
-    await api.delete<unknown, ApiResponse<void>>(`/folder/${folderId}`)
+    await api.delete<unknown, ApiResponse<void>>(`/folder/${folderId}`, { timeout: 0 })
 }
 
 /**
@@ -386,7 +386,7 @@ export async function restoreFolder(folderId: number): Promise<void> {
  * 彻底删除文件夹
  */
 export async function permanentDeleteFolder(folderId: number): Promise<void> {
-    await api.delete<unknown, ApiResponse<void>>(`/folder/${folderId}/permanent`)
+    await api.delete<unknown, ApiResponse<void>>(`/folder/${folderId}/permanent`, { timeout: 0 })
 }
 
 /**
@@ -395,4 +395,11 @@ export async function permanentDeleteFolder(folderId: number): Promise<void> {
 export async function getFolderTree(): Promise<FolderInfo[]> {
     const res = await api.get<unknown, ApiResponse<FolderInfo[]>>('/folder/tree')
     return res.data
+}
+
+/**
+ * 清空回收站
+ */
+export async function clearRecycleBin(): Promise<void> {
+    await api.delete<unknown, ApiResponse<void>>('/file/recycle', { timeout: 0 })
 }
