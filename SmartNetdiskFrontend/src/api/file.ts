@@ -214,7 +214,7 @@ export async function getDownloadUrl(fileId: number): Promise<string> {
  */
 export function downloadFileStream(fileId: number): void {
     const token = localStorage.getItem('satoken') || ''
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
     // 直接打开下载链接，浏览器会根据 Content-Disposition 头处理文件名
     window.location.href = `${baseUrl}/file/${fileId}/download/stream?satoken=${token}`
 }
@@ -232,7 +232,7 @@ export async function getPreviewUrl(fileId: number): Promise<string> {
  */
 export function getStreamUrl(fileId: number): string {
     const token = localStorage.getItem('satoken') || ''
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
     return `${baseUrl}/file/${fileId}/stream?satoken=${token}`
 }
 

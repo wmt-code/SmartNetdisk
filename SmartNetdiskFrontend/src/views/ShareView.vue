@@ -401,7 +401,7 @@ function handleDownload() {
     }
 
     // 获取 API 基础 URL
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081'
+    const baseURL = import.meta.env.VITE_API_BASE_URL || ''
     const downloadUrl = `${baseURL}/s/${code}/download/stream${params.toString() ? '?' + params.toString() : ''}`
 
     // 创建隐藏的 a 标签触发下载
