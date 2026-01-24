@@ -9,8 +9,8 @@ services:
     container_name: smartnetdisk-app
     restart: unless-stopped
     ports:
-      - "9000:80"      # 前端端口（映射到宿主机 9000）
-      - "8081:8081"    # 后端端口
+      - "9080:80"      # 前端端口（映射到宿主机 9080，避免与 MinIO 9000 冲突）
+      - "8081:8081"    # 后端 API 端口
     environment:
       # 数据库配置（使用容器 IP）
       - DB_HOST=172.17.0.2

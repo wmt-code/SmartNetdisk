@@ -53,17 +53,35 @@ pipeline {
         stage('部署新容器') {
             steps {
                 echo '🚀 部署新容器...'
-                sh """
-                    # 创建部署目录
-                    mkdir -p ${DEPLOY_PATH}
-                    
-                    # 复制 docker-compose.yml
-                    cp docker-compose.yml ${DEPLOY_PATH}/
-                    
-                    # 进入部署目录并启动
-                    cd ${DEPLOY_PATH}
-                    docker-compose up -d
-                """
+                sh '''
+                    # 尝试使用 docker compose (V2) 或回退到 docker run
+                    if docker compose version > /dev/null 2>&1; then
+                        echo "使用 docker compose 部署..."
+                        mkdir -p /opt/smartnetdisk
+                        cp docker-compose.yml /opt/smartnetdisk/
+                        cd /opt/smartnetdisk
+                        docker compose up -d
+                    else
+                        echo "docker compose 不可用，使用 docker run 部署..."
+                        docker run -d \
+                            --name smartnetdisk-app \
+                            --restart unless-stopped \
+                            --network 1panel-network \
+                            -p 9080:80 \
+                            -p 8081:8081 \
+                            -e DB_HOST=172.17.0.2 \
+                            -e DB_USERNAME=postgres \
+                            -e DB_PASSWORD=Pgsql@2314 \
+                            -e REDIS_HOST=172.18.0.2 \
+                            -e REDIS_PASSWORD=redis_rbKhnX \
+                            -e MINIO_ENDPOINT=http://172.18.0.6:9000 \
+                            -e MINIO_ACCESS_KEY=minio_nCHiZS \
+                            -e MINIO_SECRET_KEY=minio_ZPZEzf \
+                            -e KKFILEVIEW_BASE_URL=http://172.18.0.4:8012 \
+                            -e SILICONFLOW_API_KEY=sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm \
+                            smartnetdisk:latest
+                    fi
+                '''
             }
         }
 
