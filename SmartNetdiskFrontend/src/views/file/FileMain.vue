@@ -1509,23 +1509,32 @@ const handleBatchPermanentDelete = async () => {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: var(--space-sm);
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  padding: var(--space-sm) var(--space-sm) var(--space-md);
+  background: linear-gradient(transparent 0%, rgba(0, 0, 0, 0.7) 40%, rgba(0, 0, 0, 0.85) 100%);
   display: flex;
   justify-content: center;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
   opacity: 0;
   transform: translateY(8px);
   transition: all var(--transition-base) var(--ease-out);
 
   .el-button {
-    --el-button-size: 28px;
-    background: rgba(255, 255, 255, 0.9);
+    --el-button-size: 32px;
+    background: white;
     border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    color: #374151;
 
     &:hover {
-      background: white;
-      transform: scale(1.1);
+      background: var(--color-primary);
+      color: white;
+      transform: scale(1.15);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+    }
+
+    &.el-button--danger:hover {
+      background: var(--color-error);
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
     }
   }
 }
