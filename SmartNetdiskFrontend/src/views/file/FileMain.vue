@@ -1,5 +1,5 @@
 <template>
-  <div class="file-main h-full w-full flex flex-col">
+  <div class="file-main" :class="{ 'is-mobile': isMobile }">
     <!-- 工具栏 -->
     <div class="toolbar flex items-center justify-between p-4 border-b border-gray-100">
       <div class="left flex items-center gap-4">
@@ -103,12 +103,9 @@
     </div>
 
     <!-- 文件列表区域 -->
-    <div class="file-content flex-1 overflow-auto p-4">
-      <!-- 加载中 -->
-      <div v-if="loading" class="loading-container">
-        <el-icon class="loading-icon" :size="48"><Loading /></el-icon>
-        <p>加载中...</p>
-      </div>
+    <div class="file-content">
+      <!-- 加载骨架屏 -->
+      <FileSkeleton v-if="loading" :count="12" :type="viewMode" />
 
       <!-- 列表视图 -->
       <el-table
@@ -176,27 +173,103 @@
       </el-table>
 
       <!-- 网格视图 -->
-      <div v-else-if="viewMode === 'grid' && fileList.length > 0" class="grid-view grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+      <div v-else-if="viewMode === 'grid' && fileList.length > 0" class="grid-view">
         <div
-          v-for="file in fileList"
+          v-for="(file, index) in fileList"
           :key="file.id"
-          class="file-card glass-card p-4 flex flex-col items-center cursor-pointer"
-          @dblclick="handleRowDblClick(file)"
-          @contextmenu.prevent="handleContextMenu($event, file)"
+          class="file-card-wrapper stagger-item"
+          :style="{ animationDelay: `${index * 30}ms` }"
         >
-          <el-icon :size="48" :color="getFileIconColor(file.fileType)">
-            <component :is="getFileIcon(file.fileType)" />
-          </el-icon>
-          <span class="mt-2 text-sm text-center truncate w-full">{{ file.fileName }}</span>
-          <span class="text-xs text-gray-400 mt-1">{{ file.fileSizeStr }}</span>
+          <div
+            class="file-card"
+            :class="{
+              'is-selected': isFileSelected(file),
+              'is-folder': file.fileType === 'folder'
+            }"
+            @click="toggleFileSelection(file, $event)"
+            @dblclick="handleRowDblClick(file)"
+            @contextmenu.prevent="handleContextMenu($event, file)"
+          >
+            <!-- Selection checkbox -->
+            <div class="file-card-checkbox" @click.stop>
+              <el-checkbox
+                :model-value="isFileSelected(file)"
+                @change="toggleFileSelection(file)"
+              />
+            </div>
+
+            <!-- File icon with type color -->
+            <div class="file-card-icon" :class="getFileTypeClass(file.fileType)">
+              <el-icon :size="48">
+                <component :is="getFileIcon(file.fileType)" />
+              </el-icon>
+            </div>
+
+            <!-- File info -->
+            <div class="file-card-info">
+              <span class="file-card-name" :title="file.fileName">{{ file.fileName }}</span>
+              <span class="file-card-meta">{{ file.fileSizeStr }}</span>
+            </div>
+
+            <!-- Vectorized badge -->
+            <el-tag v-if="file.isVectorized" class="file-card-badge" size="small" type="success">
+              AI
+            </el-tag>
+
+            <!-- Hover actions -->
+            <div class="file-card-actions">
+              <el-button
+                v-if="!isRecycleBin && file.fileType !== 'folder'"
+                size="small"
+                circle
+                @click.stop="handleDownload(file)"
+              >
+                <el-icon><Download /></el-icon>
+              </el-button>
+              <el-button
+                v-if="!isRecycleBin"
+                size="small"
+                circle
+                @click.stop="handleShare(file)"
+              >
+                <el-icon><Share /></el-icon>
+              </el-button>
+              <el-button
+                size="small"
+                circle
+                type="danger"
+                @click.stop="isRecycleBin ? handlePermanentDelete(file) : handleDelete(file)"
+              >
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- 空状态 -->
-      <el-empty v-else-if="!loading && fileList.length === 0" description="暂无文件" class="mt-20">
-        <el-button type="primary" @click="triggerUpload">上传文件</el-button>
-      </el-empty>
+      <EmptyState
+        v-else-if="!loading && fileList.length === 0"
+        :type="isRecycleBin ? 'recycle' : (searchKeyword ? 'search' : 'empty')"
+        :show-action="!isRecycleBin && !searchKeyword"
+        @action="triggerUpload"
+      />
     </div>
+
+    <!-- Mobile action bar for batch operations -->
+    <MobileActionBar
+      v-if="isMobile"
+      :selected-count="selectedFiles.length"
+      :is-recycle="isRecycleBin"
+      @clear="clearSelection"
+      @download="handleBatchDownload"
+      @delete="handleBatchDelete"
+      @move="handleBatchMove"
+      @copy="handleBatchCopy"
+      @share="handleBatchShare"
+      @restore="handleBatchRestore"
+      @permanent-delete="handleBatchPermanentDelete"
+    />
 
     <!-- 分页 -->
     <div v-if="total > pageSize" class="pagination-container p-4 border-t border-gray-100 flex justify-center">
@@ -364,6 +437,9 @@ import FolderSelectDialog from '@/components/FolderSelectDialog.vue'
 import UppyUploader from '@/components/UppyUploader.vue'
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
 import FileEditorDialog from '@/components/FileEditorDialog.vue'
+import { EmptyState, FileSkeleton } from '@/components/ui'
+import MobileActionBar from '@/components/file/MobileActionBar.vue'
+import { useIsMobile } from '@/composables'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getFileList, deleteFile, renameFile, downloadFileStream,
@@ -378,6 +454,9 @@ import { useUserStore } from '@/stores/user'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+
+// Mobile detection
+const isMobile = useIsMobile()
 
 // 视图模式
 const viewMode = ref<'list' | 'grid'>('list')
@@ -517,6 +596,65 @@ const getFileIconColor = (type: string) => {
     audio: '#06B6D4',
   }
   return colorMap[type] || '#6B7280'
+}
+
+// 文件类型 CSS 类
+const getFileTypeClass = (type: string) => {
+  const classMap: Record<string, string> = {
+    folder: 'type-folder',
+    document: 'type-document',
+    image: 'type-image',
+    video: 'type-video',
+    audio: 'type-audio',
+    archive: 'type-archive',
+    code: 'type-code'
+  }
+  return classMap[type] || 'type-document'
+}
+
+// 检查文件是否被选中
+const isFileSelected = (file: FileInfo) => {
+  return selectedFiles.value.some(f => f.id === file.id)
+}
+
+// 切换文件选中状态
+const toggleFileSelection = (file: FileInfo, event?: MouseEvent) => {
+  const index = selectedFiles.value.findIndex(f => f.id === file.id)
+  if (index >= 0) {
+    selectedFiles.value.splice(index, 1)
+  } else {
+    if (event?.shiftKey && selectedFiles.value.length > 0) {
+      // Shift 选择范围
+      const lastSelected = selectedFiles.value[selectedFiles.value.length - 1]
+      const lastIndex = fileList.value.findIndex(f => f.id === lastSelected?.id)
+      const currentIndex = fileList.value.findIndex(f => f.id === file.id)
+      const start = Math.min(lastIndex, currentIndex)
+      const end = Math.max(lastIndex, currentIndex)
+      for (let i = start; i <= end; i++) {
+        const f = fileList.value[i]
+        if (f && !selectedFiles.value.some(s => s.id === f.id)) {
+          selectedFiles.value.push(f)
+        }
+      }
+    } else {
+      selectedFiles.value.push(file)
+    }
+  }
+}
+
+// 清空选中
+const clearSelection = () => {
+  selectedFiles.value = []
+}
+
+// 批量下载（移动端）
+const handleBatchDownload = () => {
+  if (selectedFiles.value.length === 0) return
+  selectedFiles.value.forEach(file => {
+    if (file.fileType !== 'folder') {
+      handleDownload(file)
+    }
+  })
 }
 
 // 格式化时间
@@ -1175,7 +1313,333 @@ const handleBatchPermanentDelete = async () => {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+.file-main {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+// Toolbar
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border-light);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+
+  .left, .right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .right {
+    gap: var(--space-sm);
+  }
+}
+
+// File content area
+.file-content {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-md);
+}
+
+// Grid view
+.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-md);
+
+  @media (min-width: 640px) {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+}
+
+// File card
+.file-card-wrapper {
+  opacity: 0;
+  animation: fadeInUp var(--transition-base) var(--ease-out) forwards;
+}
+
+.file-card {
+  position: relative;
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  border: 2px solid transparent;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-out);
+  overflow: hidden;
+
+  &:hover {
+    background: var(--card-bg-hover);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-xl);
+
+    .file-card-checkbox {
+      opacity: 1;
+    }
+
+    .file-card-actions {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  &.is-selected {
+    border-color: var(--color-primary);
+    background: var(--sidebar-item-active);
+
+    .file-card-checkbox {
+      opacity: 1;
+    }
+  }
+
+  &.is-folder {
+    .file-card-icon {
+      color: var(--color-folder);
+    }
+  }
+}
+
+.file-card-checkbox {
+  position: absolute;
+  top: var(--space-sm);
+  left: var(--space-sm);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: 2;
+}
+
+.file-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-sm);
+  transition: transform var(--transition-base) var(--ease-spring);
+
+  &.type-folder { color: var(--color-folder); }
+  &.type-document { color: var(--color-document); }
+  &.type-image { color: var(--color-image); }
+  &.type-video { color: var(--color-video); }
+  &.type-audio { color: var(--color-audio); }
+  &.type-archive { color: var(--color-archive); }
+  &.type-code { color: var(--color-code); }
+
+  .file-card:hover & {
+    transform: scale(1.1);
+  }
+}
+
+.file-card-info {
+  width: 100%;
+  text-align: center;
+}
+
+.file-card-name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+
+.file-card-meta {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.file-card-badge {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+}
+
+.file-card-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: var(--space-sm);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  display: flex;
+  justify-content: center;
+  gap: var(--space-xs);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: all var(--transition-base) var(--ease-out);
+
+  .el-button {
+    --el-button-size: 28px;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+
+    &:hover {
+      background: white;
+      transform: scale(1.1);
+    }
+  }
+}
+
+// Stagger animation
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stagger-item {
+  opacity: 0;
+  animation: fadeInUp var(--transition-base) var(--ease-out) forwards;
+}
+
+// File table
+.file-table {
+  :deep(.el-table__row) {
+    transition: background-color var(--transition-fast);
+  }
+
+  :deep(.el-table__row:hover) {
+    background-color: var(--sidebar-item-hover) !important;
+  }
+
+  :deep(.el-table__header-wrapper) {
+    background: var(--color-surface-secondary);
+  }
+
+  :deep(.el-table__body-wrapper) {
+    background: transparent;
+  }
+}
+
+// Pagination
+.pagination-container {
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border-light);
+  display: flex;
+  justify-content: center;
+}
+
+// Context menu
+.context-menu {
+  position: fixed;
+  z-index: 2000;
+  background: var(--color-surface);
+  min-width: 160px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--color-border);
+  padding: var(--space-xs) 0;
+  font-size: 14px;
+  animation: scaleIn var(--transition-fast) var(--ease-spring);
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background-color: var(--sidebar-item-hover);
+    color: var(--color-primary);
+  }
+
+  &.danger {
+    color: var(--color-error);
+
+    &:hover {
+      background-color: rgba(239, 68, 68, 0.1);
+    }
+  }
+}
+
+.menu-divider {
+  margin: var(--space-xs) 0;
+  border-color: var(--color-border-light);
+}
+
+// Mobile styles
+.file-main.is-mobile {
+  .toolbar {
+    padding: var(--space-sm);
+
+    .left, .right {
+      gap: var(--space-sm);
+    }
+  }
+
+  .file-content {
+    padding: var(--space-sm);
+    padding-bottom: calc(var(--space-sm) + 100px); // Space for mobile action bar
+  }
+
+  .grid-view {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+  }
+
+  .file-card {
+    padding: var(--space-sm);
+
+    .file-card-checkbox {
+      opacity: 1;
+    }
+  }
+
+  .file-card-icon {
+    width: 56px;
+    height: 56px;
+
+    .el-icon {
+      font-size: 40px !important;
+    }
+  }
+
+  .file-card-name {
+    font-size: 0.8125rem;
+  }
+}
+
+// Utility classes
 .h-full { height: 100%; }
 .w-full { width: 100%; }
 .flex { display: flex; }
@@ -1191,106 +1655,19 @@ const handleBatchPermanentDelete = async () => {
 .mb-4 { margin-bottom: 1rem; }
 .mt-2 { margin-top: 0.5rem; }
 .mt-20 { margin-top: 5rem; }
+.ml-2 { margin-left: 0.5rem; }
 .overflow-auto { overflow: auto; }
-.truncate { 
-  overflow: hidden; 
-  text-overflow: ellipsis; 
-  white-space: nowrap; 
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .text-center { text-align: center; }
 .text-sm { font-size: 0.875rem; }
 .text-xs { font-size: 0.75rem; }
+.text-lg { font-size: 1.125rem; }
 .font-medium { font-weight: 500; }
 .cursor-pointer { cursor: pointer; }
-
-.grid { display: grid; }
-.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-@media (min-width: 640px) {
-  .sm\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (min-width: 768px) {
-  .md\:grid-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-}
-@media (min-width: 1024px) {
-  .lg\:grid-cols-8 { grid-template-columns: repeat(8, minmax(0, 1fr)); }
-}
-
-.file-table :deep(.el-table__row) {
-  transition: background-color 0.2s;
-}
-.file-table :deep(.el-table__row:hover) {
-  background-color: rgba(124, 58, 237, 0.05) !important;
-}
-
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
-  color: #7C3AED;
-}
-
-.loading-icon {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.upload-item {
-  background: #f9fafb;
-  padding: 12px;
-  border-radius: 8px;
-}
-
-.upload-list {
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 4px; /* 防止滚动条遮挡内容 */
-}
-
-/* 右键菜单样式 */
-.context-menu {
-  position: fixed;
-  z-index: 2000;
-  background: white;
-  min-width: 140px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #e5e7eb;
-  padding: 4px 0;
-  font-size: 14px;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  cursor: pointer;
-  color: #374151;
-  transition: background-color 0.2s;
-}
-
-.menu-item:hover {
-  background-color: #f3f4f6;
-  color: #7C3AED;
-}
-
-.menu-item.danger {
-  color: #EF4444;
-}
-
-.menu-item.danger:hover {
-  background-color: #FEF2F2;
-}
-
-.menu-divider {
-  margin: 4px 0;
-  border-color: #e5e7eb;
-}
+.border-b { border-bottom-width: 1px; }
+.border-gray-100 { border-color: #F3F4F6; }
 </style>

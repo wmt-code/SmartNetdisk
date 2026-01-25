@@ -1,0 +1,66 @@
+// Dark Theme Variables
+[data-theme="dark"] {
+  // Background colors
+  --color-background: #0F0F1A;
+  --color-background-secondary: #1A1A2E;
+  --color-surface: #1E1E32;
+  --color-surface-secondary: #252542;
+
+  // Text colors
+  --color-text: #F3F4F6;
+  --color-text-secondary: #D1D5DB;
+  --color-text-muted: #9CA3AF;
+  --color-text-inverse: #1F2937;
+
+  // Border colors
+  --color-border: #374151;
+  --color-border-light: #4B5563;
+  --color-border-focus: var(--color-primary-light);
+
+  // Glassmorphism
+  --glass-bg: rgba(30, 30, 50, 0.8);
+  --glass-bg-hover: rgba(40, 40, 65, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 16px;
+
+  // Card backgrounds
+  --card-bg: rgba(30, 30, 50, 0.6);
+  --card-bg-hover: rgba(40, 40, 65, 0.8);
+  --card-border: rgba(255, 255, 255, 0.08);
+
+  // Sidebar
+  --sidebar-bg: rgba(30, 30, 50, 0.85);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-item-hover: rgba(167, 139, 250, 0.15);
+  --sidebar-item-active: rgba(167, 139, 250, 0.25);
+
+  // Input/Form
+  --input-bg: rgba(30, 30, 50, 0.6);
+  --input-border: #374151;
+  --input-border-focus: var(--color-primary-light);
+
+  // Overlay
+  --overlay-bg: rgba(0, 0, 0, 0.7);
+  --modal-bg: #1E1E32;
+
+  // Scrollbar
+  --scrollbar-track: #1A1A2E;
+  --scrollbar-thumb: #4B5563;
+  --scrollbar-thumb-hover: #6B7280;
+
+  // AI Message colors
+  --ai-message-bg: linear-gradient(135deg, #2D2D4A 0%, #3D3D5C 100%);
+  --user-message-bg: linear-gradient(135deg, #6D28D9 0%, #5B21B6 100%);
+
+  // Adjusted primary for dark mode
+  --color-primary: #A78BFA;
+  --color-primary-light: #C4B5FD;
+  --color-primary-dark: #7C3AED;
+
+  // Shadows - darker for dark mode
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-primary: 0 10px 40px rgba(167, 139, 250, 0.25);
+}

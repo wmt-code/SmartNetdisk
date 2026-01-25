@@ -1,0 +1,55 @@
+// Light Theme Variables
+:root,
+[data-theme="light"] {
+  // Background colors
+  --color-background: #FAF5FF;
+  --color-background-secondary: #F3E8FF;
+  --color-surface: #FFFFFF;
+  --color-surface-secondary: #FAFAFA;
+
+  // Text colors
+  --color-text: #1F2937;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #9CA3AF;
+  --color-text-inverse: #FFFFFF;
+
+  // Border colors
+  --color-border: #E5E7EB;
+  --color-border-light: #F3F4F6;
+  --color-border-focus: var(--color-primary);
+
+  // Glassmorphism
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-blur: 12px;
+
+  // Card backgrounds
+  --card-bg: rgba(255, 255, 255, 0.6);
+  --card-bg-hover: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(255, 255, 255, 0.3);
+
+  // Sidebar
+  --sidebar-bg: rgba(255, 255, 255, 0.7);
+  --sidebar-border: rgba(255, 255, 255, 0.5);
+  --sidebar-item-hover: rgba(124, 58, 237, 0.08);
+  --sidebar-item-active: rgba(124, 58, 237, 0.12);
+
+  // Input/Form
+  --input-bg: rgba(255, 255, 255, 0.8);
+  --input-border: #E5E7EB;
+  --input-border-focus: var(--color-primary);
+
+  // Overlay
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --modal-bg: #FFFFFF;
+
+  // Scrollbar
+  --scrollbar-track: #F3F4F6;
+  --scrollbar-thumb: #D1D5DB;
+  --scrollbar-thumb-hover: #9CA3AF;
+
+  // AI Message colors
+  --ai-message-bg: linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 100%);
+  --user-message-bg: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+}

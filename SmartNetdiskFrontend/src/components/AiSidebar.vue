@@ -1,8 +1,18 @@
 <template>
-  <div>
-    <!-- 触发按钮 -->
+  <div class="ai-sidebar-container">
+    <!-- Mobile overlay -->
+    <Transition name="fade">
+      <div
+        v-if="isOpen && isMobile"
+        class="ai-overlay"
+        @click="isOpen = false"
+      />
+    </Transition>
+
+    <!-- Floating trigger button -->
     <div
-      class="ai-trigger"
+      class="ai-trigger hover-glow"
+      :class="{ 'is-open': isOpen }"
       @click="isOpen = !isOpen"
     >
       <el-icon :size="24" color="white">
@@ -11,87 +21,154 @@
       </el-icon>
     </div>
 
-    <!-- AI 侧边栏 -->
-    <Transition name="slide">
+    <!-- AI Sidebar -->
+    <Transition :name="isMobile ? 'slide-up' : 'slide-right'">
       <div
         v-if="isOpen"
-        class="ai-sidebar fixed right-0 top-0 h-screen w-96 glass-panel z-40 flex flex-col"
+        class="ai-sidebar"
+        :class="{ 'mobile-fullscreen': isMobile }"
       >
-        <!-- 头部 -->
-        <div class="header flex items-center justify-between p-4 border-b border-gray-100">
-          <div class="flex items-center gap-2">
-            <el-icon :size="24" color="#7C3AED"><MagicStick /></el-icon>
-            <span class="font-bold text-lg text-gray-800">AI 智能助手</span>
+        <!-- Header -->
+        <div class="ai-header">
+          <div class="ai-header-title">
+            <div class="ai-icon-wrapper">
+              <el-icon :size="20"><MagicStick /></el-icon>
+            </div>
+            <span>AI 智能助手</span>
           </div>
-          <el-button circle size="small" @click="isOpen = false">
-            <el-icon><Close /></el-icon>
-          </el-button>
+          <div class="ai-header-actions">
+            <el-tooltip content="清空对话" placement="bottom">
+              <el-button
+                class="header-btn"
+                circle
+                size="small"
+                @click="clearChat"
+              >
+                <el-icon><Refresh /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-button
+              class="header-btn"
+              circle
+              size="small"
+              @click="isOpen = false"
+            >
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
         </div>
 
-        <!-- 功能切换 -->
-        <div class="p-4">
-          <el-radio-group v-model="mode" class="w-full">
-            <el-radio-button value="chat" class="flex-1">
+        <!-- Mode toggle -->
+        <div class="ai-mode-toggle">
+          <el-radio-group v-model="mode" class="mode-group">
+            <el-radio-button value="chat" class="mode-btn">
               <el-icon><ChatDotRound /></el-icon>
-              智能问答
+              <span>智能问答</span>
             </el-radio-button>
-            <el-radio-button value="search" class="flex-1">
+            <el-radio-button value="search" class="mode-btn">
               <el-icon><Search /></el-icon>
-              语义搜索
+              <span>语义搜索</span>
             </el-radio-button>
           </el-radio-group>
         </div>
 
-        <!-- 聊天区域 -->
-        <div class="chat-area flex-1 overflow-auto p-4 space-y-4">
-          <div v-for="(msg, index) in messages" :key="index" 
-               :class="['message', msg.role === 'user' ? 'user-msg' : 'ai-msg']">
-            <div class="avatar">
-              <el-avatar v-if="msg.role === 'user'" :size="32" 
-                         src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" />
-              <div v-else class="ai-avatar w-8 h-8 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] 
-                              flex items-center justify-center">
-                <el-icon color="white" :size="16"><MagicStick /></el-icon>
+        <!-- Chat area -->
+        <div ref="chatAreaRef" class="ai-chat-area">
+          <TransitionGroup name="message-list">
+            <div
+              v-for="(msg, index) in messages"
+              :key="index"
+              class="message-wrapper"
+              :class="msg.role"
+            >
+              <div class="message-avatar">
+                <el-avatar
+                  v-if="msg.role === 'user'"
+                  :size="36"
+                  src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png"
+                />
+                <div v-else class="ai-avatar">
+                  <el-icon color="white" :size="18"><MagicStick /></el-icon>
+                </div>
               </div>
-            </div>
-            <div class="content glass-card p-3 max-w-xs">
-              <p class="text-sm text-gray-700">{{ msg.content }}</p>
-              <!-- 引用的文件 -->
-              <div v-if="msg.references?.length" class="mt-2 pt-2 border-t border-gray-100">
-                <p class="text-xs text-gray-500 mb-1">引用文件:</p>
-                <div v-for="ref in msg.references" :key="ref.fileId || ref.fileName"
-                     class="text-xs text-[#7C3AED] cursor-pointer hover:underline">
-                  📄 {{ ref.fileName }}
+
+              <div class="message-bubble" :class="msg.role">
+                <p class="message-content">{{ msg.content }}</p>
+
+                <!-- Search results -->
+                <div v-if="msg.searchResults?.length" class="search-results">
+                  <div
+                    v-for="result in msg.searchResults"
+                    :key="result.fileId"
+                    class="search-result-item"
+                    @click="goToFile(result.fileId)"
+                  >
+                    <el-icon class="result-icon"><Document /></el-icon>
+                    <div class="result-info">
+                      <span class="result-name">{{ result.fileName }}</span>
+                      <span class="result-match">{{ result.matchedContent }}</span>
+                    </div>
+                    <span class="result-score">{{ Math.round((result.score || 0) * 100) }}%</span>
+                  </div>
+                </div>
+
+                <!-- Reference files -->
+                <div v-if="msg.references?.length" class="message-references">
+                  <div class="references-header">
+                    <el-icon :size="12"><Document /></el-icon>
+                    <span>引用来源</span>
+                  </div>
+                  <div class="references-list">
+                    <span
+                      v-for="ref in msg.references"
+                      :key="ref.fileId || ref.fileName"
+                      class="reference-tag"
+                      @click="goToFile(ref.fileId)"
+                    >
+                      {{ ref.fileName }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </TransitionGroup>
 
-          <!-- 加载状态 -->
-          <div v-if="isLoading" class="message ai-msg">
-            <div class="ai-avatar w-8 h-8 rounded-full bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] 
-                        flex items-center justify-center">
-              <el-icon color="white" :size="16" class="animate-spin"><Loading /></el-icon>
+          <!-- Loading state -->
+          <div v-if="isLoading" class="message-wrapper ai">
+            <div class="message-avatar">
+              <div class="ai-avatar loading">
+                <el-icon color="white" :size="18" class="spin"><Loading /></el-icon>
+              </div>
             </div>
-            <div class="content glass-card p-3">
-              <p class="text-sm text-gray-500">思考中...</p>
+            <div class="message-bubble ai loading-bubble">
+              <span class="loading-dot"></span>
+              <span class="loading-dot"></span>
+              <span class="loading-dot"></span>
             </div>
           </div>
         </div>
 
-        <!-- 输入区域 -->
-        <div class="input-area p-4 border-t border-gray-100">
-          <div class="flex gap-2">
+        <!-- Input area -->
+        <div class="ai-input-area">
+          <div class="input-wrapper">
             <el-input
               v-model="inputText"
               :placeholder="mode === 'chat' ? '输入问题，如：这个项目的主要功能是什么？' : '描述你要查找的文件内容...'"
-              @keyup.enter="sendMessage"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              type="textarea"
+              resize="none"
+              @keydown.enter.exact.prevent="sendMessage"
             />
-            <el-button type="primary" :disabled="!inputText.trim() || isLoading" @click="sendMessage">
+            <el-button
+              class="send-btn"
+              type="primary"
+              :disabled="!inputText.trim() || isLoading"
+              @click="sendMessage"
+            >
               <el-icon><Promotion /></el-icon>
             </el-button>
           </div>
-          <p class="text-xs text-gray-400 mt-2">
+          <p class="input-hint">
             {{ mode === 'chat' ? 'AI 将基于您的文件内容回答问题' : '使用自然语言描述，AI 将帮您找到相关文件' }}
           </p>
         </div>
@@ -101,13 +178,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { MagicStick, Close, ChatDotRound, Search, Promotion, Loading } from '@element-plus/icons-vue'
+import {
+  MagicStick, Close, ChatDotRound, Search, Promotion, Loading,
+  Refresh, Document
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { semanticSearch, chat, type SearchResult, type FileReference } from '@/api/ai'
+import { useIsMobile } from '@/composables'
 
 const router = useRouter()
+const isMobile = useIsMobile()
 const isOpen = ref(false)
 const mode = ref<'chat' | 'search'>('chat')
 const inputText = ref('')
@@ -128,7 +210,7 @@ const messages = ref<Message[]>([
   }
 ])
 
-// 滚动到底部
+// Scroll to bottom
 const scrollToBottom = () => {
   nextTick(() => {
     if (chatAreaRef.value) {
@@ -137,7 +219,7 @@ const scrollToBottom = () => {
   })
 }
 
-// 发送消息
+// Send message
 const sendMessage = async () => {
   if (!inputText.value.trim() || isLoading.value) return
 
@@ -149,7 +231,6 @@ const sendMessage = async () => {
 
   try {
     if (mode.value === 'search') {
-      // 语义搜索
       const results = await semanticSearch(userMessage, 10)
       if (results.length > 0) {
         messages.value.push({
@@ -164,17 +245,16 @@ const sendMessage = async () => {
         })
       }
     } else {
-      // 智能问答
       const history = messages.value
         .filter(m => m.role === 'user' || m.role === 'ai')
-        .slice(-10) // 保留最近10条历史
+        .slice(-10)
         .map(m => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
           content: m.content
         }))
-      
+
       const response = await chat({ question: userMessage, history })
-      
+
       messages.value.push({
         role: 'ai',
         content: response.answer,
@@ -198,7 +278,7 @@ const sendMessage = async () => {
   }
 }
 
-// 清空对话
+// Clear chat
 const clearChat = () => {
   messages.value = [{
     role: 'ai',
@@ -206,15 +286,28 @@ const clearChat = () => {
   }]
 }
 
-// 跳转到文件
+// Go to file
 const goToFile = (fileId?: number) => {
   if (fileId) {
-    // TODO: 实现跳转到具体文件
     router.push('/files')
+    isOpen.value = false
   }
 }
 
-// 暴露方法供外部调用
+// Close on escape key
+watch(isOpen, (open) => {
+  if (open) {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        isOpen.value = false
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }
+})
+
+// Expose methods
 defineExpose({
   open: () => { isOpen.value = true },
   close: () => { isOpen.value = false },
@@ -222,111 +315,491 @@ defineExpose({
 })
 </script>
 
-<style scoped>
-.fixed { position: fixed; }
-.bottom-6 { bottom: 1.5rem; }
-.right-6 { right: 1.5rem; }
-.right-0 { right: 0; }
-.top-0 { top: 0; }
-.w-14 { width: 3.5rem; }
-.h-14 { height: 3.5rem; }
-.w-8 { width: 2rem; }
-.h-8 { height: 2rem; }
-.w-96 { width: 24rem; }
-.h-screen { height: 100vh; }
-.rounded-full { border-radius: 9999px; }
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.flex-1 { flex: 1; }
-.items-center { align-items: center; }
-.justify-center { justify-content: center; }
-.justify-between { justify-content: space-between; }
-.gap-2 { gap: 0.5rem; }
-.p-3 { padding: 0.75rem; }
-.p-4 { padding: 1rem; }
-.mt-2 { margin-top: 0.5rem; }
-.pt-2 { padding-top: 0.5rem; }
-.mb-1 { margin-bottom: 0.25rem; }
-.max-w-xs { max-width: 20rem; }
-.overflow-auto { overflow: auto; }
-.space-y-4 > * + * { margin-top: 1rem; }
-.text-sm { font-size: 0.875rem; }
-.text-xs { font-size: 0.75rem; }
-.text-lg { font-size: 1.125rem; }
-.font-bold { font-weight: 700; }
-.cursor-pointer { cursor: pointer; }
-.shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
-.z-40 { z-index: 40; }
-.z-50 { z-index: 50; }
+<style scoped lang="scss">
+.ai-sidebar-container {
+  position: relative;
+}
 
-/* AI 浮动触发按钮 */
+// Overlay for mobile
+.ai-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  z-index: calc(var(--z-modal) - 1);
+}
+
+// Floating trigger button
 .ai-trigger {
   position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
+  bottom: var(--space-lg);
+  right: var(--space-lg);
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 20px 25px -5px rgba(124, 58, 237, 0.3), 0 10px 10px -5px rgba(124, 58, 237, 0.2);
-  z-index: 50;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--shadow-primary);
+  z-index: var(--z-modal);
+  transition: all var(--transition-base) var(--ease-spring);
+
+  &:hover {
+    transform: scale(1.1);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &.is-open {
+    background: var(--color-error);
+    box-shadow: 0 10px 40px rgba(239, 68, 68, 0.3);
+  }
+
+  @media (max-width: 767px) {
+    bottom: var(--space-md);
+    right: var(--space-md);
+    width: 48px;
+    height: 48px;
+  }
 }
 
-.ai-trigger:hover {
-  transform: scale(1.1);
-  box-shadow: 0 25px 30px -5px rgba(124, 58, 237, 0.4), 0 15px 15px -5px rgba(124, 58, 237, 0.3);
+// Sidebar
+.ai-sidebar {
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  width: 400px;
+  max-width: 100vw;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-left: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  z-index: var(--z-modal);
+  box-shadow: var(--shadow-2xl);
+
+  &.mobile-fullscreen {
+    width: 100vw;
+    height: 100vh;
+    border-left: none;
+    border-radius: 0;
+  }
 }
 
-/* AI 聊天头像 */
-.ai-avatar {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
+// Header
+.ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.ai-header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--color-text);
+}
+
+.ai-icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  color: white;
 }
 
-.w-full { width: 100%; }
+.ai-header-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
 
-.transition-transform { transition: transform 0.2s ease; }
-.hover\:scale-105:hover { transform: scale(1.05); }
-.hover\:underline:hover { text-decoration: underline; }
+.header-btn {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: transparent;
+  --el-button-hover-bg-color: var(--sidebar-item-hover);
+  color: var(--color-text-muted);
+
+  &:hover {
+    color: var(--color-text);
+  }
+}
+
+// Mode toggle
+.ai-mode-toggle {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.mode-group {
+  width: 100%;
+  display: flex;
+
+  :deep(.el-radio-button) {
+    flex: 1;
+
+    .el-radio-button__inner {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-xs);
+      background: var(--color-surface);
+      border-color: var(--color-border);
+      color: var(--color-text-secondary);
+      transition: all var(--transition-fast);
+    }
+
+    &.is-active .el-radio-button__inner {
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+      color: white;
+    }
+  }
+}
+
+// Chat area
+.ai-chat-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+// Message
+.message-wrapper {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-start;
+
+  &.user {
+    flex-direction: row-reverse;
+  }
+}
+
+.message-avatar {
+  flex-shrink: 0;
+}
+
+.ai-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.loading {
+    animation: pulse 2s infinite;
+  }
+}
+
+.message-bubble {
+  max-width: 85%;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-lg);
+  animation: fadeInUp var(--transition-base) var(--ease-out);
+
+  &.ai {
+    background: var(--ai-message-bg);
+    border-bottom-left-radius: var(--radius-sm);
+  }
+
+  &.user {
+    background: var(--user-message-bg);
+    border-bottom-right-radius: var(--radius-sm);
+    color: white;
+  }
+}
+
+.message-content {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+
+  .user & {
+    color: white;
+  }
+}
+
+// Search results
+.search-results {
+  margin-top: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background: var(--sidebar-item-hover);
+    transform: translateX(4px);
+  }
+}
+
+.result-icon {
+  color: var(--color-document);
+  flex-shrink: 0;
+}
+
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-name {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-match {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-score {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+// References
+.message-references {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.references-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.references-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reference-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--color-primary-100);
+  color: var(--color-primary);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background: var(--color-primary);
+    color: white;
+  }
+}
+
+// Loading bubble
+.loading-bubble {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-md) !important;
+}
+
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--color-primary);
+  border-radius: var(--radius-full);
+  animation: bounce 1.4s infinite ease-in-out both;
+
+  &:nth-child(1) { animation-delay: -0.32s; }
+  &:nth-child(2) { animation-delay: -0.16s; }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
 
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
-.animate-spin { animation: spin 1s linear infinite; }
 
-.message {
+// Input area
+.ai-input-area {
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+}
+
+.input-wrapper {
   display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-}
-.user-msg {
-  flex-direction: row-reverse;
-}
-.user-msg .content {
-  background: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
-}
-.user-msg .content p {
-  color: white;
+  gap: var(--space-sm);
+  align-items: flex-end;
+
+  :deep(.el-textarea__inner) {
+    background: var(--input-bg);
+    border-color: var(--input-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.9375rem;
+    resize: none;
+
+    &:focus {
+      border-color: var(--color-primary);
+    }
+  }
 }
 
-/* Slide transition */
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s ease;
+.send-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
 }
-.slide-enter-from,
-.slide-leave-to {
+
+.input-hint {
+  margin-top: var(--space-xs);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+// Transitions
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-base);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform var(--transition-base) var(--ease-out);
+}
+
+.slide-right-enter-from,
+.slide-right-leave-to {
   transform: translateX(100%);
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform var(--transition-base) var(--ease-out);
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+}
+
+.message-list-enter-active,
+.message-list-leave-active {
+  transition: all var(--transition-base);
+}
+
+.message-list-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.message-list-leave-to {
+  opacity: 0;
+}
+
+// Mobile adjustments
+@media (max-width: 767px) {
+  .ai-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .ai-header-title {
+    font-size: 1rem;
+  }
+
+  .ai-icon-wrapper {
+    width: 32px;
+    height: 32px;
+  }
+
+  .ai-mode-toggle {
+    padding: var(--space-sm);
+  }
+
+  .ai-chat-area {
+    padding: var(--space-sm);
+  }
+
+  .message-bubble {
+    max-width: 90%;
+  }
+
+  .ai-input-area {
+    padding: var(--space-sm);
+    padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0));
+  }
 }
 </style>

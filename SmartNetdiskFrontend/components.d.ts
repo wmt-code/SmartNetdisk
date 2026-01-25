@@ -13,7 +13,6 @@ declare module 'vue' {
   export interface GlobalComponents {
     AiSidebar: typeof import('./src/components/AiSidebar.vue')['default']
     BatchProgressDialog: typeof import('./src/components/BatchProgressDialog.vue')['default']
-    ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
     ElBreadcrumb: typeof import('element-plus/es')['ElBreadcrumb']
@@ -47,14 +46,19 @@ declare module 'vue' {
     ElTable: typeof import('element-plus/es')['ElTable']
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElTree: typeof import('element-plus/es')['ElTree']
+    EmptyState: typeof import('./src/components/ui/EmptyState.vue')['default']
     FileEditorDialog: typeof import('./src/components/FileEditorDialog.vue')['default']
     FilePreviewDialog: typeof import('./src/components/FilePreviewDialog.vue')['default']
+    FileSkeleton: typeof import('./src/components/ui/FileSkeleton.vue')['default']
     FolderSelectDialog: typeof import('./src/components/FolderSelectDialog.vue')['default']
+    MobileActionBar: typeof import('./src/components/file/MobileActionBar.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ShareBatchDialog: typeof import('./src/components/ShareBatchDialog.vue')['default']
     ShareDialog: typeof import('./src/components/ShareDialog.vue')['default']
+    ThemeToggle: typeof import('./src/components/ui/ThemeToggle.vue')['default']
     UppyUploader: typeof import('./src/components/UppyUploader.vue')['default']
   }
   export interface GlobalDirectives {
