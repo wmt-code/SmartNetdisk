@@ -69,7 +69,7 @@ pipeline {
                             --network 1panel-network \
                             -p 9080:80 \
                             -p 8081:8081 \
-                            -e DB_HOST=172.17.0.2 \
+                            -e DB_HOST=172.18.0.9 \
                             -e DB_USERNAME=postgres \
                             -e DB_PASSWORD=Pgsql@2314 \
                             -e REDIS_HOST=172.18.0.2 \
@@ -104,7 +104,7 @@ pipeline {
                         fi
                         
                         # 检查前端服务
-                        if curl -s http://localhost:9000 > /dev/null 2>&1; then
+                        if curl -s http://localhost:9080 > /dev/null 2>&1; then
                             echo "✅ 前端服务健康!"
                         else
                             echo "⚠️ 前端服务可能还在启动中..."
@@ -141,7 +141,7 @@ pipeline {
             echo '''
             ✅ ==========================================
             ✅ 部署成功!
-            ✅ 前端地址: http://your-server:9000
+            ✅ 前端地址: http://your-server:9080
             ✅ 后端地址: http://your-server:8081
             ✅ ==========================================
             '''

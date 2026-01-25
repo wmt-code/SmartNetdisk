@@ -3,9 +3,9 @@ spring:
     name: SmartNetdisk
   datasource:
     driver-class-name: org.postgresql.Driver
-    username: postgres
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:Pgsql@2314}
-    url: jdbc:postgresql://82.158.225.68:5432/smartnetdisk
+    url: jdbc:postgresql://${DB_HOST:82.158.225.68}:${DB_PORT:5432}/${DB_NAME:smartnetdisk}
   data:
     redis:
       password: ${REDIS_PASSWORD:redis_rbKhnX}
