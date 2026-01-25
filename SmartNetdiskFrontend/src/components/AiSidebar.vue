@@ -772,8 +772,19 @@ defineExpose({
 
 // Mobile adjustments
 @media (max-width: 767px) {
+  .ai-sidebar.mobile-fullscreen {
+    // Ensure full coverage
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+  }
+
   .ai-header {
     padding: var(--space-sm) var(--space-md);
+    flex-shrink: 0;
   }
 
   .ai-header-title {
@@ -787,10 +798,13 @@ defineExpose({
 
   .ai-mode-toggle {
     padding: var(--space-sm);
+    flex-shrink: 0;
   }
 
   .ai-chat-area {
     padding: var(--space-sm);
+    flex: 1;
+    min-height: 0; // Important for flex overflow
   }
 
   .message-bubble {
@@ -798,8 +812,21 @@ defineExpose({
   }
 
   .ai-input-area {
-    padding: var(--space-sm);
-    padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0));
+    padding: var(--space-md);
+    padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 20px));
+    flex-shrink: 0;
+    background: var(--color-surface);
+  }
+
+  .input-wrapper {
+    :deep(.el-textarea__inner) {
+      font-size: 16px; // Prevent iOS zoom on focus
+    }
+  }
+
+  .send-btn {
+    width: 44px;
+    height: 44px;
   }
 }
 </style>

@@ -6,12 +6,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import Uppy from '@uppy/core'
 import Dashboard from '@uppy/dashboard'
 import ThumbnailGenerator from '@uppy/thumbnail-generator'
 import { SmartUploadPlugin } from '@/utils/uppySmartUpload'
 import { useUserStore } from '@/stores/user'
+import { useIsMobile } from '@/composables'
 
 // 导入 Uppy 样式
 import '@uppy/core/css/style.css'
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const userStore = useUserStore()
+const isMobile = useIsMobile()
 const uppyContainer = ref<HTMLElement>()
 
 let uppy: Uppy | null = null
@@ -61,13 +63,13 @@ function initUppy() {
     inline: true,
     target: uppyContainer.value,
     width: '100%',
-    height: 450,
+    height: isMobile.value ? 'calc(100vh - 120px)' : 450,
     hideProgressDetails: false, // 启用详细进度显示（上传速度、剩余时间）
     proudlyDisplayPoweredByUppy: false,
-    note: '支持拖拽上传文件或文件夹、秒传、断点续传，单文件最大 10GB',
+    note: isMobile.value ? '支持秒传、断点续传' : '支持拖拽上传文件或文件夹、秒传、断点续传，单文件最大 10GB',
     hideUploadButton: false,
     showRemoveButtonAfterComplete: true,
-    singleFileFullScreen: true, // 单文件时全屏预览
+    singleFileFullScreen: false, // 移动端不使用全屏预览
     showSelectedFiles: true, // 显示已选文件列表
     // 启用文件夹上传
     fileManagerSelectionType: 'both', // 允许选择文件和文件夹
@@ -275,6 +277,38 @@ onBeforeUnmount(() => {
   :deep(.uppy-Dashboard-note) {
     color: #6B7280;
     font-size: 12px;
+  }
+
+  // Mobile responsive styles
+  @media (max-width: 767px) {
+    :deep(.uppy-Dashboard-inner) {
+      border-radius: 8px;
+    }
+
+    :deep(.uppy-Dashboard-AddFiles-title) {
+      font-size: 1rem;
+    }
+
+    :deep(.uppy-Dashboard-note) {
+      font-size: 11px;
+      padding: 0 8px;
+    }
+
+    :deep(.uppy-Dashboard-AddFiles) {
+      padding: 16px;
+    }
+
+    :deep(.uppy-Dashboard-Item) {
+      padding: 8px;
+    }
+
+    :deep(.uppy-Dashboard-Item-name) {
+      font-size: 12px;
+    }
+
+    :deep(.uppy-StatusBar-content) {
+      flex-wrap: wrap;
+    }
   }
 }
 </style>

@@ -1,10 +1,10 @@
 <template>
   <div class="file-main" :class="{ 'is-mobile': isMobile }">
     <!-- 工具栏 -->
-    <div class="toolbar flex items-center justify-between p-4 border-b border-gray-100">
-      <div class="left flex items-center gap-4">
+    <div class="toolbar">
+      <div class="toolbar-left">
         <!-- 面包屑导航 - 非回收站 -->
-        <el-breadcrumb v-if="!isRecycleBin" separator="/">
+        <el-breadcrumb v-if="!isRecycleBin" separator="/" class="breadcrumb">
           <el-breadcrumb-item>
             <span class="cursor-pointer" @click="navigateToRoot">
               <el-icon><HomeFilled /></el-icon>
@@ -16,29 +16,34 @@
         </el-breadcrumb>
 
         <!-- 回收站标题 -->
-        <div v-if="isRecycleBin" class="flex items-center gap-2">
+        <div v-if="isRecycleBin" class="recycle-title">
           <el-icon :size="20"><Delete /></el-icon>
-          <span class="font-medium text-lg">回收站</span>
+          <span>回收站</span>
         </div>
       </div>
 
-      <div class="right flex items-center gap-2">
+      <div class="toolbar-right">
         <!-- 清空回收站按钮 -->
-        <el-button v-if="isRecycleBin" type="danger" plain @click="handleEmptyRecycleBin">
+        <el-button v-if="isRecycleBin" type="danger" plain size="small" @click="handleEmptyRecycleBin">
           <el-icon><Delete /></el-icon>
-          清空回收站
+          <span class="btn-text">清空</span>
         </el-button>
 
-        <!-- 新建文件夹 -->
-        <el-button v-if="!isRecycleBin" @click="showNewFolderDialog = true">
+        <!-- 新建文件夹 - 移动端只显示图标 -->
+        <el-button v-if="!isRecycleBin && !isMobile" @click="showNewFolderDialog = true">
           <el-icon><FolderAdd /></el-icon>
           新建文件夹
         </el-button>
+        <el-tooltip v-if="!isRecycleBin && isMobile" content="新建文件夹" placement="bottom">
+          <el-button @click="showNewFolderDialog = true" circle>
+            <el-icon><FolderAdd /></el-icon>
+          </el-button>
+        </el-tooltip>
 
         <!-- 上传按钮 -->
-        <el-dropdown v-if="!isRecycleBin" split-button type="primary" @click="triggerUpload">
+        <el-dropdown v-if="!isRecycleBin" split-button type="primary" size="default" @click="triggerUpload">
           <el-icon><Upload /></el-icon>
-          上传文件
+          <span class="btn-text">上传文件</span>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item @click="triggerUpload">
@@ -53,45 +58,40 @@
           </template>
         </el-dropdown>
 
-        <el-divider v-if="!isRecycleBin" direction="vertical" />
+        <!-- 桌面端显示的批量操作按钮 -->
+        <template v-if="!isMobile">
+          <el-divider v-if="!isRecycleBin" direction="vertical" />
 
-        <!-- 批量分享按钮 -->
-        <el-button
-          v-if="selectedFiles.length > 0 && !isRecycleBin"
-          type="success"
-          @click="handleBatchShare"
-        >
-          <el-icon><Share /></el-icon>
-          分享 ({{ selectedFiles.length }})
-        </el-button>
+          <!-- 批量分享按钮 -->
+          <el-button
+            v-if="selectedFiles.length > 0 && !isRecycleBin"
+            type="success"
+            @click="handleBatchShare"
+          >
+            <el-icon><Share /></el-icon>
+            分享 ({{ selectedFiles.length }})
+          </el-button>
 
-        <!-- 批量操作按钮组 - 普通文件列表 -->
-        <el-button-group v-if="selectedFiles.length > 0 && !isRecycleBin" class="ml-2">
-          <el-button @click="handleBatchMove">
-            移动
-          </el-button>
-          <el-button @click="handleBatchCopy">
-            复制
-          </el-button>
-          <el-button type="danger" @click="handleBatchDelete">
-            删除
-          </el-button>
-        </el-button-group>
+          <!-- 批量操作按钮组 - 普通文件列表 -->
+          <el-button-group v-if="selectedFiles.length > 0 && !isRecycleBin" class="ml-2">
+            <el-button @click="handleBatchMove">移动</el-button>
+            <el-button @click="handleBatchCopy">复制</el-button>
+            <el-button type="danger" @click="handleBatchDelete">删除</el-button>
+          </el-button-group>
 
-        <!-- 批量操作按钮组 - 回收站 -->
-        <el-button-group v-if="selectedFiles.length > 0 && isRecycleBin" class="ml-2">
-          <el-button type="primary" @click="handleBatchRestore">
-            恢复 ({{ selectedFiles.length }})
-          </el-button>
-          <el-button type="danger" @click="handleBatchPermanentDelete">
-            彻底删除
-          </el-button>
-        </el-button-group>
+          <!-- 批量操作按钮组 - 回收站 -->
+          <el-button-group v-if="selectedFiles.length > 0 && isRecycleBin" class="ml-2">
+            <el-button type="primary" @click="handleBatchRestore">
+              恢复 ({{ selectedFiles.length }})
+            </el-button>
+            <el-button type="danger" @click="handleBatchPermanentDelete">彻底删除</el-button>
+          </el-button-group>
 
-        <el-divider direction="vertical" />
+          <el-divider direction="vertical" />
+        </template>
 
         <!-- 视图切换 -->
-        <el-radio-group v-model="viewMode" size="small">
+        <el-radio-group v-model="viewMode" size="small" class="view-toggle">
           <el-radio-button value="list">
             <el-icon><List /></el-icon>
           </el-radio-button>
@@ -117,30 +117,31 @@
         @row-contextmenu="handleContextMenu"
         class="file-table"
         row-class-name="cursor-pointer"
+        :table-layout="isMobile ? 'auto' : 'fixed'"
       >
-        <el-table-column type="selection" width="40" />
-        <el-table-column prop="fileName" label="文件名" min-width="300">
+        <el-table-column type="selection" :width="isMobile ? 32 : 40" />
+        <el-table-column prop="fileName" label="文件名" :min-width="isMobile ? 150 : 300">
           <template #default="{ row }">
-            <div class="flex items-center gap-2">
-              <el-icon :size="24" :color="getFileIconColor(row.fileType)">
+            <div class="file-name-cell">
+              <el-icon :size="isMobile ? 20 : 24" :color="getFileIconColor(row.fileType)">
                 <component :is="getFileIcon(row.fileType)" />
               </el-icon>
-              <span class="font-medium">{{ row.fileName }}</span>
+              <span class="file-name-text">{{ row.fileName }}</span>
               <el-tag v-if="row.isVectorized" size="small" type="success">已向量化</el-tag>
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="fileSizeStr" label="大小" width="120">
+        <el-table-column v-if="!isMobile" prop="fileSizeStr" label="大小" width="100">
           <template #default="{ row }">
             {{ row.fileSizeStr }}
           </template>
         </el-table-column>
-        <el-table-column prop="updateTime" label="修改时间" width="180">
+        <el-table-column v-if="!isMobile" prop="updateTime" label="修改时间" width="160">
           <template #default="{ row }">
             {{ formatTime(row.updateTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="isRecycleBin ? 200 : 180" fixed="right">
+        <el-table-column label="操作" :width="isMobile ? 100 : (isRecycleBin ? 200 : 160)" fixed="right">
           <template #default="{ row }">
             <!-- 回收站操作 -->
             <template v-if="isRecycleBin">
@@ -283,7 +284,7 @@
     </div>
 
     <!-- 新建文件夹对话框 -->
-    <el-dialog v-model="showNewFolderDialog" title="新建文件夹" width="400px">
+    <el-dialog v-model="showNewFolderDialog" title="新建文件夹" :width="isMobile ? '90%' : '400px'">
       <el-input v-model="newFolderName" placeholder="请输入文件夹名称" @keyup.enter="handleCreateFolder" />
       <template #footer>
         <el-button @click="showNewFolderDialog = false">取消</el-button>
@@ -292,7 +293,7 @@
     </el-dialog>
 
     <!-- 重命名对话框 -->
-    <el-dialog v-model="renameDialogVisible" title="重命名" width="400px">
+    <el-dialog v-model="renameDialogVisible" title="重命名" :width="isMobile ? '90%' : '400px'">
       <el-input v-model="renameNewName" placeholder="请输入新名称" @keyup.enter="handleRename" />
       <template #footer>
         <el-button @click="renameDialogVisible = false">取消</el-button>
@@ -304,7 +305,8 @@
     <el-dialog
       v-model="uploadDialogVisible"
       title="上传文件"
-      width="700px"
+      :width="isMobile ? '95%' : '700px'"
+      :fullscreen="isMobile"
       :close-on-click-modal="false"
       destroy-on-close
       @closed="handleUploadClose"
@@ -1331,15 +1333,43 @@ const handleBatchPermanentDelete = async () => {
   border-bottom: 1px solid var(--color-border-light);
   flex-wrap: wrap;
   gap: var(--space-sm);
+  min-height: 56px;
+}
 
-  .left, .right {
-    display: flex;
-    align-items: center;
-    gap: var(--space-md);
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-shrink: 0;
+  min-width: 0;
+
+  .breadcrumb {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
-  .right {
-    gap: var(--space-sm);
+  .recycle-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-weight: 500;
+    font-size: 1.125rem;
+  }
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+
+  .btn-text {
+    margin-left: 4px;
+  }
+
+  .view-toggle {
+    flex-shrink: 0;
   }
 }
 
@@ -1601,9 +1631,44 @@ const handleBatchPermanentDelete = async () => {
 .file-main.is-mobile {
   .toolbar {
     padding: var(--space-sm);
+    gap: var(--space-xs);
+  }
 
-    .left, .right {
-      gap: var(--space-sm);
+  .toolbar-left {
+    gap: var(--space-sm);
+    max-width: 40%;
+
+    .breadcrumb {
+      :deep(.el-breadcrumb__item) {
+        .el-breadcrumb__inner {
+          max-width: 60px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: inline-block;
+        }
+      }
+    }
+
+    .recycle-title {
+      font-size: 1rem;
+      span {
+        display: none;
+      }
+    }
+  }
+
+  .toolbar-right {
+    gap: var(--space-xs);
+
+    .btn-text {
+      display: none;
+    }
+
+    // Hide text in split button
+    :deep(.el-dropdown__caret-button) {
+      padding-left: 8px;
+      padding-right: 8px;
     }
   }
 
@@ -1615,27 +1680,100 @@ const handleBatchPermanentDelete = async () => {
   .grid-view {
     grid-template-columns: repeat(2, 1fr);
     gap: var(--space-sm);
+    width: 100%;
+  }
+
+  .file-card-wrapper {
+    width: 100%;
+    min-width: 0;
   }
 
   .file-card {
     padding: var(--space-sm);
+    width: 100%;
+    min-width: 0;
+    min-height: 120px;
 
     .file-card-checkbox {
       opacity: 1;
+      top: 4px;
+      left: 4px;
     }
   }
 
   .file-card-icon {
-    width: 56px;
-    height: 56px;
+    width: 44px;
+    height: 44px;
 
     .el-icon {
-      font-size: 40px !important;
+      font-size: 32px !important;
     }
   }
 
   .file-card-name {
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
+    max-width: 100%;
+    word-break: break-all;
+  }
+
+  .file-card-meta {
+    font-size: 0.625rem;
+  }
+
+  .file-card-badge {
+    top: 4px;
+    right: 4px;
+    font-size: 0.625rem;
+    padding: 0 4px;
+  }
+
+  .file-card-actions {
+    padding: 4px;
+    gap: 2px;
+
+    .el-button {
+      --el-button-size: 24px;
+    }
+  }
+
+  // Table mobile styles
+  .file-table {
+    :deep(.el-table__header) {
+      th {
+        padding: 8px 4px;
+        font-size: 0.75rem;
+      }
+    }
+
+    :deep(.el-table__body) {
+      td {
+        padding: 8px 4px;
+      }
+    }
+  }
+
+  .file-name-cell {
+    .file-name-text {
+      font-size: 0.8125rem;
+      max-width: 120px;
+    }
+  }
+}
+
+// File name cell styles
+.file-name-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+
+  .file-name-text {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
   }
 }
 
