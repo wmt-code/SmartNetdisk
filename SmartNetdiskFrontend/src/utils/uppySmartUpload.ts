@@ -233,7 +233,8 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
      * 普通上传（小文件）
      */
     private async uploadDirectly(file: UppyFile<any, any>, fileData: File) {
-        console.log('[SmartUpload] 开始普通上传:', file.name, '大小:', fileData.size)
+        const meta = file.meta as SmartUploadMeta
+        console.log('[SmartUpload] 开始普通上传:', file.name, '大小:', fileData.size, '目标文件夹:', meta.folderId)
 
         const uploadStarted = Date.now()
 
@@ -254,7 +255,7 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
             }
         })
 
-        const result = await uploadFile(fileData, this.folderId, (percent) => {
+        const result = await uploadFile(fileData, meta.folderId ?? this.folderId, (percent) => {
             const bytesUploaded = Math.floor((fileData.size * percent) / 100)
             console.log(`[SmartUpload] 普通上传进度: ${percent}% (${bytesUploaded}/${fileData.size} bytes)`)
 
@@ -462,7 +463,7 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
             fileName: file.name,
             totalSize: fileData.size,
             totalChunks,
-            folderId: this.folderId
+            folderId: meta.folderId ?? this.folderId
         })
 
         console.log('[SmartUpload] 分片合并完成:', result)
