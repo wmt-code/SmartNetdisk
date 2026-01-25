@@ -58,9 +58,9 @@ ai:
     model: Qwen/Qwen2.5-7B-Instruct
     embedding-model: BAAI/bge-large-zh-v1.5
 
-# kkFileView 配置 - 使用容器 IP
+# kkFileView 配置 - 使用域名（返回给浏览器访问）
 kkfileview:
-  base-url: ${KKFILEVIEW_BASE_URL:http://172.18.0.4:8012}
+  base-url: ${KKFILEVIEW_BASE_URL:https://kkfile.abcsummer.site}
 
 # Sa-Token 配置
 sa-token:

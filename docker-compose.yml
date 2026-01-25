@@ -23,8 +23,8 @@ services:
       - MINIO_ENDPOINT=http://172.18.0.6:9000
       - MINIO_ACCESS_KEY=minio_nCHiZS
       - MINIO_SECRET_KEY=minio_ZPZEzf
-      # kkFileView 配置
-      - KKFILEVIEW_BASE_URL=http://172.18.0.4:8012
+      # kkFileView 配置（域名，返回给浏览器访问）
+      - KKFILEVIEW_BASE_URL=https://kkfile.abcsummer.site
       # AI 配置
       - SILICONFLOW_API_KEY=sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm
       # JVM 配置

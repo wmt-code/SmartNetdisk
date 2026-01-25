@@ -77,7 +77,7 @@ pipeline {
                             -e MINIO_ENDPOINT=http://172.18.0.6:9000 \
                             -e MINIO_ACCESS_KEY=minio_nCHiZS \
                             -e MINIO_SECRET_KEY=minio_ZPZEzf \
-                            -e KKFILEVIEW_BASE_URL=http://172.18.0.4:8012 \
+                            -e KKFILEVIEW_BASE_URL=https://kkfile.abcsummer.site \
                             -e SILICONFLOW_API_KEY=sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm \
                             smartnetdisk:latest
                     fi
