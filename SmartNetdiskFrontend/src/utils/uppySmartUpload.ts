@@ -22,6 +22,20 @@ export interface SmartUploadPluginOptions {
 }
 
 /**
+ * 从文件名中提取纯文件名（移除路径部分）
+ * 文件夹上传时 file.name 可能包含 webkitRelativePath（如 "目录/子目录/文件.txt"）
+ */
+function getPureFileName(name: string): string {
+    if (name.includes('/')) {
+        return name.substring(name.lastIndexOf('/') + 1)
+    }
+    if (name.includes('\\')) {
+        return name.substring(name.lastIndexOf('\\') + 1)
+    }
+    return name
+}
+
+/**
  * 智能上传插件
  * 处理 MD5 计算、秒传检测、分片上传逻辑
  */
@@ -142,9 +156,12 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
                 message: '检测秒传...'
             })
 
+            // 提取纯文件名（文件夹上传时 file.name 可能包含路径）
+            const pureFileName = getPureFileName(file.name)
+
             const checkResult = await checkChunks({
                 fileMd5,
-                fileName: file.name,
+                fileName: pureFileName,
                 fileSize: fileData.size,
                 folderId: targetFolderId
             })
@@ -458,9 +475,12 @@ export class SmartUploadPlugin extends BasePlugin<SmartUploadPluginOptions, any,
         updateProgress('merge', 0)  // 开始合并，进度为95%
         console.log('[SmartUpload] 开始合并分片...')
 
+        // 提取纯文件名（文件夹上传时 file.name 可能包含路径）
+        const pureFileName = getPureFileName(file.name)
+
         const result = await mergeChunks({
             fileMd5,
-            fileName: file.name,
+            fileName: pureFileName,
             totalSize: fileData.size,
             totalChunks,
             folderId: meta.folderId ?? this.folderId

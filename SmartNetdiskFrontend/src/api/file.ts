@@ -82,6 +82,20 @@ export async function getFileDetail(fileId: number): Promise<FileInfo> {
 }
 
 /**
+ * 从文件名中提取纯文件名（移除路径部分）
+ * 文件夹上传时 file.name 可能包含 webkitRelativePath（如 "目录/子目录/文件.txt"）
+ */
+function getPureFileName(name: string): string {
+    if (name.includes('/')) {
+        return name.substring(name.lastIndexOf('/') + 1)
+    }
+    if (name.includes('\\')) {
+        return name.substring(name.lastIndexOf('\\') + 1)
+    }
+    return name
+}
+
+/**
  * 普通文件上传
  */
 export async function uploadFile(
@@ -90,7 +104,9 @@ export async function uploadFile(
     onProgress?: (percent: number) => void
 ): Promise<UploadResult> {
     const formData = new FormData()
-    formData.append('file', file)
+    // 使用纯文件名，避免文件夹上传时文件名包含路径
+    const pureFileName = getPureFileName(file.name)
+    formData.append('file', file, pureFileName)
     formData.append('folderId', String(folderId))
 
     const res = await api.post<unknown, ApiResponse<UploadResult>>('/file/upload', formData, {
