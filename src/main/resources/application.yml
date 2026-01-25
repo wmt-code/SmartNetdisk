@@ -63,7 +63,7 @@ ai:
 
 # kkFileView 配置
 kkfileview:
-  base-url: ${KKFILEVIEW_BASE_URL:http://82.158.225.68:40145}
+  base-url: ${KKFILEVIEW_BASE_URL:https://kkfile.abcsummer.site}
 
 # Sa-Token 配置
 sa-token:
