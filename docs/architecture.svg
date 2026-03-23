@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" font-family="'Microsoft YaHei','PingFang SC',sans-serif">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9CA3AF"/>
+    </marker>
+  </defs>
+
+  <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1F2937">SmartNetdisk — 系统架构总览</text>
+
+  <!-- 用户层 -->
+  <rect x="100" y="50" width="700" height="60" rx="30" fill="#fff" stroke="#7C3AED" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="76" text-anchor="middle" font-size="15" font-weight="600" fill="#7C3AED">用户层（浏览器）</text>
+  <text x="450" y="96" text-anchor="middle" font-size="12" fill="#6B7280">Vue 3 · Element Plus · Pinia · TypeScript · 响应式适配</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="110" x2="450" y2="140" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Spring Boot 层 -->
+  <rect x="60" y="145" width="780" height="200" rx="16" fill="#F8FAFC" stroke="#E2E8F0" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="90" y="172" font-size="14" font-weight="700" fill="#1F2937">Spring Boot 4.x 后端服务</text>
+
+  <!-- Controllers -->
+  <rect x="85" y="185" width="120" height="50" rx="8" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1"/>
+  <text x="145" y="206" text-anchor="middle" font-size="12" font-weight="600" fill="#1E40AF">认证模块</text>
+  <text x="145" y="222" text-anchor="middle" font-size="10" fill="#3B82F6">Sa-Token · 角色</text>
+
+  <rect x="220" y="185" width="120" height="50" rx="8" fill="#FCE7F3" stroke="#EC4899" stroke-width="1"/>
+  <text x="280" y="206" text-anchor="middle" font-size="12" font-weight="600" fill="#9D174D">文件服务</text>
+  <text x="280" y="222" text-anchor="middle" font-size="10" fill="#EC4899">上传 · 预览 · 分享</text>
+
+  <rect x="355" y="185" width="120" height="50" rx="8" fill="#EDE9FE" stroke="#8B5CF6" stroke-width="1"/>
+  <text x="415" y="206" text-anchor="middle" font-size="12" font-weight="600" fill="#5B21B6">AI 服务</text>
+  <text x="415" y="222" text-anchor="middle" font-size="10" fill="#8B5CF6">RAG · 向量化 · 摘要</text>
+
+  <rect x="490" y="185" width="120" height="50" rx="8" fill="#D1FAE5" stroke="#10B981" stroke-width="1"/>
+  <text x="550" y="206" text-anchor="middle" font-size="12" font-weight="600" fill="#065F46">通知服务</text>
+  <text x="550" y="222" text-anchor="middle" font-size="10" fill="#10B981">实时通知 · 轮询</text>
+
+  <rect x="625" y="185" width="120" height="50" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1"/>
+  <text x="685" y="206" text-anchor="middle" font-size="12" font-weight="600" fill="#92400E">管理后台</text>
+  <text x="685" y="222" text-anchor="middle" font-size="10" fill="#F59E0B">用户 · 文件 · 统计</text>
+
+  <!-- Arrows between controllers -->
+  <line x1="205" y1="210" x2="220" y2="210" stroke="#CBD5E1" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="340" y1="210" x2="355" y2="210" stroke="#CBD5E1" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="475" y1="210" x2="490" y2="210" stroke="#CBD5E1" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="610" y1="210" x2="625" y2="210" stroke="#CBD5E1" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Service layer -->
+  <rect x="85" y="255" width="730" height="40" rx="8" fill="#fff" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="450" y="280" text-anchor="middle" font-size="13" fill="#4B5563">Service Layer（MyBatis-Plus ORM · 事务管理 · 异步处理 · 文本提取 POI/PDFBox）</text>
+
+  <!-- Data layer -->
+  <rect x="85" y="310" width="730" height="28" rx="6" fill="#F1F5F9" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="450" y="329" text-anchor="middle" font-size="12" fill="#64748B">Data Access Layer · MinIO Client · Redis Client · AI REST Client</text>
+
+  <!-- Arrow -->
+  <line x1="450" y1="345" x2="450" y2="380" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 基础设施层 -->
+  <rect x="60" y="385" width="380" height="100" rx="16" fill="#fff" stroke="#3B82F6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="250" y="412" text-anchor="middle" font-size="14" font-weight="700" fill="#1E40AF">数据存储层</text>
+  <text x="250" y="434" text-anchor="middle" font-size="12" fill="#3B82F6">PostgreSQL 16 + pgvector（向量搜索）</text>
+  <text x="250" y="452" text-anchor="middle" font-size="12" fill="#3B82F6">Redis 7（Session · 缓存）</text>
+  <text x="250" y="470" text-anchor="middle" font-size="12" fill="#3B82F6">MinIO（S3 对象存储）</text>
+
+  <rect x="460" y="385" width="380" height="100" rx="16" fill="#fff" stroke="#8B5CF6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="650" y="412" text-anchor="middle" font-size="14" font-weight="700" fill="#5B21B6">AI 模型网关</text>
+  <text x="650" y="434" text-anchor="middle" font-size="12" fill="#8B5CF6">多供应商路由 · 自动适配</text>
+  <text x="650" y="452" text-anchor="middle" font-size="12" fill="#8B5CF6">对话 / Embedding / 摘要</text>
+  <text x="650" y="470" text-anchor="middle" font-size="12" fill="#8B5CF6">DashScope 原生 + OpenAI 兼容</text>
+
+  <!-- Arrow -->
+  <line x1="250" y1="385" x2="250" y2="380" stroke="#9CA3AF" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="650" y1="385" x2="650" y2="380" stroke="#9CA3AF" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="650" y1="485" x2="650" y2="515" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 外部AI -->
+  <rect x="350" y="520" width="500" height="65" rx="16" fill="#F5F3FF" stroke="#C4B5FD" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="600" y="548" text-anchor="middle" font-size="14" font-weight="700" fill="#5B21B6">外部 AI 服务</text>
+  <text x="600" y="568" text-anchor="middle" font-size="12" fill="#7C3AED">阿里云 DashScope · 火山引擎 · 硅基流动 · 自定义 OpenAI 兼容 API</text>
+
+  <!-- Docker label -->
+  <rect x="60" y="610" width="780" height="55" rx="12" fill="#F0FDF4" stroke="#86EFAC" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="450" y="635" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">Docker 本地开发环境</text>
+  <text x="450" y="653" text-anchor="middle" font-size="12" fill="#16A34A">docker-compose.local.yml → PostgreSQL(pgvector) + Redis + MinIO + kkFileView 一键启动</text>
+
+  <!-- kkFileView -->
+  <rect x="60" y="520" width="270" height="65" rx="16" fill="#FFF7ED" stroke="#FDBA74" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="195" y="548" text-anchor="middle" font-size="14" font-weight="700" fill="#9A3412">文档预览服务</text>
+  <text x="195" y="568" text-anchor="middle" font-size="12" fill="#EA580C">kkFileView · Office/PDF 在线预览</text>
+
+  <line x1="250" y1="485" x2="195" y2="520" stroke="#9CA3AF" stroke-width="1" marker-end="url(#arrow)"/>
+</svg>
