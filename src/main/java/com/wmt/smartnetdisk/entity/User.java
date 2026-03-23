@@ -57,6 +57,11 @@ public class User implements Serializable {
     private Long totalSpace;
 
     /**
+     * 角色: admin/user
+     */
+    private String role;
+
+    /**
      * 状态: 0-禁用, 1-正常
      */
     private Integer status;

@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: smartnetdisk-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: smartnetdisk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      - smartnetdisk_pg_data:/var/lib/postgresql/data
+      - ./docker/init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smartnetdisk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartnetdisk-redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    command: redis-server --requirepass redis123
+    volumes:
+      - smartnetdisk_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: smartnetdisk-minio
+    restart: unless-stopped
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - smartnetdisk_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 自动创建 MinIO bucket
+  minio-init:
+    image: minio/mc:latest
+    container_name: smartnetdisk-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin123;
+      mc mb local/smartnetdisk --ignore-existing;
+      mc anonymous set download local/smartnetdisk;
+      echo 'Bucket smartnetdisk created successfully';
+      "
+
+  kkfileview:
+    image: keking/kkfileview:latest
+    container_name: smartnetdisk-kkfileview
+    restart: unless-stopped
+    ports:
+      - "8012:8012"
+    environment:
+      KK_FILE_DIR: /opt/kkFileView/file
+    volumes:
+      - smartnetdisk_kkfile_data:/opt/kkFileView/file
+
+volumes:
+  smartnetdisk_pg_data:
+  smartnetdisk_redis_data:
+  smartnetdisk_minio_data:
+  smartnetdisk_kkfile_data:

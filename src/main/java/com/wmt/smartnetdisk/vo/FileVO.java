@@ -72,4 +72,9 @@ public class FileVO implements Serializable {
      * 更新时间
      */
     private LocalDateTime updateTime;
+
+    /**
+     * AI生成的文件摘要
+     */
+    private String aiSummary;
 }

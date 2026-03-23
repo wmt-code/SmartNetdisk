@@ -7,6 +7,8 @@ import com.wmt.smartnetdisk.service.IAiService;
 import com.wmt.smartnetdisk.service.IAuthService;
 import com.wmt.smartnetdisk.vo.ChatResultVO;
 import com.wmt.smartnetdisk.vo.SearchResultVO;
+import com.wmt.smartnetdisk.entity.FileInfo;
+import com.wmt.smartnetdisk.service.IFileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class AiController {
 
     private final IAiService aiService;
     private final IAuthService authService;
+    private final IFileService fileService;
 
     /**
      * 文档向量化
@@ -82,6 +85,18 @@ public class AiController {
         String summary = aiService.generateSummary(userId, fileId);
         Map<String, String> data = new HashMap<>();
         data.put("summary", summary);
+        return Result.success(data);
+    }
+
+    /**
+     * 获取文件已有摘要（不重新生成）
+     */
+    @GetMapping("/summary/{fileId}")
+    public Result<Map<String, String>> getStoredSummary(@PathVariable("fileId") Long fileId) {
+        Long userId = authService.getCurrentUserId();
+        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+        Map<String, String> data = new HashMap<>();
+        data.put("summary", fileInfo.getAiSummary());
         return Result.success(data);
     }
 }

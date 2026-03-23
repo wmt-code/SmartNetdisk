@@ -1,0 +1,23 @@
+# 本地 Docker 开发环境配置
+# 使用方式: mvn spring-boot:run -Dspring-boot.run.profiles=local
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/smartnetdisk
+    username: postgres
+    password: postgres123
+  data:
+    redis:
+      host: localhost
+      port: 6381
+      password: redis123
+
+minio:
+  endpoint: http://localhost:9010
+  access-key: minioadmin
+  secret-key: minioadmin123
+  bucket-name: smartnetdisk
+
+kkfileview:
+  base-url: http://localhost:8012
+  # kkFileView 在 Docker 内，通过 host.docker.internal 访问宿主机上的后端
+  callback-url: http://host.docker.internal:8081

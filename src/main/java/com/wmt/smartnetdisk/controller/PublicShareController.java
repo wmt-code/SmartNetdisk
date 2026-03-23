@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -99,6 +100,33 @@ public class PublicShareController {
             @RequestParam(defaultValue = "0") Long folderId) {
         List<ShareVO.ShareItemVO> items = shareService.browseFolderContents(shareCode, password, folderId);
         return Result.success(items);
+    }
+
+    /**
+     * 获取分享文件预览链接（kkFileView）
+     */
+    @GetMapping("/{code}/preview/{fileId}")
+    public Result<Map<String, String>> previewFileById(
+            @PathVariable("code") String shareCode,
+            @PathVariable("fileId") Long fileId,
+            @RequestParam(required = false) String password) {
+        String url = shareService.getFilePreviewUrl(shareCode, password, fileId);
+        Map<String, String> data = new HashMap<>();
+        data.put("url", url);
+        return Result.success(data);
+    }
+
+    /**
+     * 流式传输分享文件（支持 Range 请求，用于视频/音频/图片预览）
+     */
+    @GetMapping("/{code}/stream/{fileId}")
+    public void streamFileById(
+            @PathVariable("code") String shareCode,
+            @PathVariable("fileId") Long fileId,
+            @RequestParam(required = false) String password,
+            @RequestHeader(value = "Range", required = false) String rangeHeader,
+            jakarta.servlet.http.HttpServletResponse response) {
+        shareService.streamFile(shareCode, password, fileId, rangeHeader, response);
     }
 
     /**

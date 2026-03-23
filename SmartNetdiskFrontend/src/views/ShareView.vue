@@ -17,7 +17,13 @@
           </el-icon>
         </div>
         <h1 class="title">文件分享</h1>
-        <p class="subtitle" v-if="needPassword">此链接已加密保护</p>
+        <div v-if="fileInfo?.sharerUsername" class="sharer-info">
+          <el-avatar :size="28" :src="fileInfo.sharerAvatar || undefined" class="sharer-avatar">
+            {{ fileInfo.sharerUsername?.charAt(0)?.toUpperCase() }}
+          </el-avatar>
+          <span class="sharer-name">{{ fileInfo.sharerUsername }} 的分享</span>
+        </div>
+        <p class="subtitle" v-else-if="needPassword">此链接已加密保护</p>
       </div>
 
       <!-- 密码验证区域 -->
@@ -91,16 +97,29 @@
               {{ fileInfo.fileSizeStr }}
             </span>
           </div>
-          <el-button
-            type="primary"
-            size="large"
-            class="download-btn"
-            :loading="downloading"
-            @click="handleDownload"
-          >
-            <el-icon v-if="!downloading"><Download /></el-icon>
-            {{ downloading ? '准备下载...' : '立即下载' }}
-          </el-button>
+          <div class="action-buttons">
+            <el-button
+              v-if="canPreviewSingleFile"
+              type="primary"
+              size="large"
+              class="preview-btn"
+              @click="previewSingleFile"
+            >
+              <el-icon><View /></el-icon>
+              在线预览
+            </el-button>
+            <el-button
+              type="primary"
+              size="large"
+              class="download-btn"
+              :class="{ 'download-btn-secondary': canPreviewSingleFile }"
+              :loading="downloading"
+              @click="handleDownload"
+            >
+              <el-icon v-if="!downloading"><Download /></el-icon>
+              {{ downloading ? '准备下载...' : '立即下载' }}
+            </el-button>
+          </div>
         </template>
 
         <!-- 文件夹/批量分享 -->
@@ -154,15 +173,25 @@
                 <span class="item-size">{{ item.sizeStr || '-' }}</span>
               </div>
               <div class="item-actions">
-                <el-button 
-                  v-if="item.itemType === 0"
-                  type="primary"
-                  size="small"
-                  :loading="downloadingFileId === item.fileId"
-                  @click.stop="downloadFile(item.fileId!)"
-                >
-                  <el-icon><Download /></el-icon>
-                </el-button>
+                <template v-if="item.itemType === 0">
+                  <el-button
+                    v-if="isPreviewable(item)"
+                    type="primary"
+                    size="small"
+                    plain
+                    @click.stop="previewFileItem(item)"
+                  >
+                    <el-icon><View /></el-icon>
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    size="small"
+                    :loading="downloadingFileId === item.fileId"
+                    @click.stop="downloadFile(item.fileId!)"
+                  >
+                    <el-icon><Download /></el-icon>
+                  </el-button>
+                </template>
                 <el-icon v-else><ArrowRight /></el-icon>
               </div>
             </div>
@@ -196,6 +225,13 @@
       </div>
     </div>
 
+    <!-- 文件预览弹窗 -->
+    <FilePreviewDialog
+      v-model="showPreview"
+      :file="previewFile"
+      :share-mode="shareParams"
+    />
+
     <!-- 底部品牌 -->
     <div class="footer-brand">
       <span>SmartNetdisk</span> · 安全分享，轻松传递
@@ -204,15 +240,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { 
+import {
   Lock, Unlock, Document, Download, CircleClose, HomeFilled,
   Key, View, Hide, WarningFilled, InfoFilled, Coin, Folder, ArrowRight, FolderOpened
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import { browseFolderContents, getFileDownloadUrl, type ShareItemInfo } from '@/api/share'
+import FilePreviewDialog from '@/components/FilePreviewDialog.vue'
+import type { FileInfo } from '@/api/file'
 
 const route = useRoute()
 
@@ -237,8 +275,74 @@ const folderPath = ref<{id: number, name: string}[]>([])
 const downloadingFileId = ref<number | null>(null)
 const currentFolderId = ref<number>(0)
 
+// 预览相关
+const showPreview = ref(false)
+const previewFile = ref<FileInfo | null>(null)
+
+// 可预览的文件扩展名
+const PREVIEWABLE_EXTENSIONS = [
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico',
+  'mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'm4v',
+  'mp3', 'wav', 'aac', 'flac', 'm4a',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'md', 'json', 'xml', 'yml', 'yaml', 'html', 'css', 'js', 'ts',
+  'java', 'py', 'go', 'c', 'cpp', 'sql'
+]
+
+const shareParams = computed(() => ({
+  code: route.params.code as string,
+  password: verifiedPassword.value || undefined
+}))
+
+// 单文件分享是否可预览
+const canPreviewSingleFile = computed(() => {
+  if (!fileInfo.value || !fileInfo.value.fileType) return false
+  const ext = fileInfo.value.fileType.toLowerCase()
+  return PREVIEWABLE_EXTENSIONS.includes(ext)
+})
+
+function isPreviewable(item: ShareItemInfo): boolean {
+  if (!item.fileType) return false
+  return PREVIEWABLE_EXTENSIONS.includes(item.fileType.toLowerCase())
+}
+
+function toFileInfo(item: { fileId?: number; name: string; size?: number; sizeStr?: string; fileType?: string }): FileInfo {
+  const ext = item.fileType || ''
+  return {
+    id: item.fileId || 0,
+    fileName: item.name,
+    fileSize: item.size || 0,
+    fileSizeStr: item.sizeStr || '-',
+    fileType: ext,
+    fileExt: ext,
+    thumbnailPath: null,
+    isVectorized: false,
+    folderId: 0,
+    createTime: '',
+    updateTime: ''
+  }
+}
+
+function previewSingleFile() {
+  if (!fileInfo.value) return
+  previewFile.value = toFileInfo({
+    fileId: fileInfo.value.fileId,
+    name: fileInfo.value.fileName || '文件',
+    size: fileInfo.value.fileSize,
+    sizeStr: fileInfo.value.fileSizeStr,
+    fileType: fileInfo.value.fileType
+  })
+  showPreview.value = true
+}
+
+function previewFileItem(item: ShareItemInfo) {
+  previewFile.value = toFileInfo(item)
+  showPreview.value = true
+}
+
 interface ShareFileInfo {
   shareType?: number
+  fileId?: number
   fileName?: string
   folderName?: string
   shareTitle?: string
@@ -250,6 +354,8 @@ interface ShareFileInfo {
   needPassword?: boolean
   hasPassword?: boolean
   folderId?: number
+  sharerUsername?: string
+  sharerAvatar?: string
 }
 
 const fileInfo = ref<ShareFileInfo | null>(null)
@@ -564,6 +670,26 @@ onMounted(() => {
     font-size: 14px;
     color: #6B7280;
   }
+
+  .sharer-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+
+    .sharer-avatar {
+      background: linear-gradient(135deg, #7C3AED, #A78BFA);
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .sharer-name {
+      font-size: 14px;
+      color: #6B7280;
+    }
+  }
 }
 
 // 密码输入区域
@@ -730,6 +856,29 @@ onMounted(() => {
     color: #6B7280;
   }
 
+  .action-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .preview-btn {
+    height: 52px;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 0 32px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%);
+    border: none;
+    transition: all 0.3s ease;
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4);
+    }
+  }
+
   .download-btn {
     height: 52px;
     font-size: 16px;
@@ -743,6 +892,10 @@ onMounted(() => {
     &:hover:not(:disabled) {
       transform: translateY(-2px);
       box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
+    }
+
+    &.download-btn-secondary {
+      padding: 0 32px;
     }
   }
 

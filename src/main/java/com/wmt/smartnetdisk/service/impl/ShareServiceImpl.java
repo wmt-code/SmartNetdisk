@@ -33,9 +33,12 @@ import com.wmt.smartnetdisk.entity.ShareItem;
 import com.wmt.smartnetdisk.mapper.FileInfoMapper;
 import com.wmt.smartnetdisk.mapper.ShareItemMapper;
 import com.wmt.smartnetdisk.mapper.ShareMapper;
+import com.wmt.smartnetdisk.entity.User;
 import com.wmt.smartnetdisk.service.IFileService;
 import com.wmt.smartnetdisk.service.IFolderService;
 import com.wmt.smartnetdisk.service.IShareService;
+import com.wmt.smartnetdisk.service.IUserService;
+import com.wmt.smartnetdisk.config.KkFileViewConfig;
 import com.wmt.smartnetdisk.utils.MinioUtils;
 import com.wmt.smartnetdisk.vo.ShareVO;
 import com.wmt.smartnetdisk.vo.SpaceVO;
@@ -59,6 +62,9 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
     private final ShareItemMapper shareItemMapper;
     private final FileInfoMapper fileInfoMapper;
     private final MinioUtils minioUtils;
+    private final KkFileViewConfig kkFileViewConfig;
+    private final com.wmt.smartnetdisk.service.INotificationService notificationService;
+    private final IUserService userService;
 
     @Value("${server.servlet.context-path:/api}")
     private String contextPath;
@@ -103,6 +109,7 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
         saveShareItem(share.getId(), ITEM_TYPE_FILE, createDTO.getFileId(), null);
 
         log.info("创建单文件分享成功: userId={}, fileId={}, shareCode={}", userId, createDTO.getFileId(), share.getShareCode());
+        notificationService.createNotification(userId, "share", "分享创建成功", "已创建分享链接", share.getId());
 
         ShareVO vo = toVO(share, true);
         vo.setFileName(fileInfo.getFileName());
@@ -144,6 +151,7 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
 
         log.info("创建目录分享成功: userId={}, folderId={}, shareCode={}, fileCount={}",
                 userId, folderId, share.getShareCode(), stats.fileCount);
+        notificationService.createNotification(userId, "share", "分享创建成功", "已创建分享链接", share.getId());
 
         ShareVO vo = toVO(share, true);
         vo.setFolderName(folder.getFolderName());
@@ -194,6 +202,7 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
 
         log.info("创建批量分享成功: userId={}, shareCode={}, itemCount={}, fileCount={}",
                 userId, share.getShareCode(), items.size(), fileCount);
+        notificationService.createNotification(userId, "share", "分享创建成功", "已创建分享链接", share.getId());
 
         return toVO(share, true);
     }
@@ -287,6 +296,24 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
     }
 
     /**
+     * 填充分享者信息
+     */
+    private void populateSharerInfo(ShareVO vo, Long userId) {
+        if (userId == null) return;
+        User sharer = userService.getById(userId);
+        if (sharer != null) {
+            vo.setSharerUsername(sharer.getUsername());
+            if (sharer.getAvatar() != null && !sharer.getAvatar().isBlank()) {
+                try {
+                    vo.setSharerAvatar(minioUtils.getAvatarPresignedUrl(sharer.getAvatar(), 7 * 24 * 3600));
+                } catch (Exception e) {
+                    vo.setSharerAvatar(null);
+                }
+            }
+        }
+    }
+
+    /**
      * 填充分享详情
      */
     private void populateShareDetails(ShareVO vo, Share share) {
@@ -343,6 +370,7 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
 
         ShareVO vo = toVO(share, false);
         populateShareDetails(vo, share);
+        populateSharerInfo(vo, share.getUserId());
         return vo;
     }
 
@@ -387,6 +415,7 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
 
         ShareVO vo = toVO(share, false);
         populateShareDetails(vo, share);
+        populateSharerInfo(vo, share.getUserId());
         return vo;
     }
 
@@ -764,6 +793,173 @@ public class ShareServiceImpl extends ServiceImpl<ShareMapper, Share> implements
             } catch (Exception ignored) {
             }
         }
+    }
+
+    @Override
+    public String getFilePreviewUrl(String shareCode, String password, Long fileId) {
+        Share share = baseMapper.selectByShareCode(shareCode);
+        if (share == null) {
+            throw new BusinessException(ResultCode.SHARE_NOT_FOUND);
+        }
+
+        checkShareValid(share);
+
+        // 验证密码
+        if (share.getPassword() != null && !share.getPassword().isEmpty()) {
+            if (password == null || !share.getPassword().equals(password)) {
+                throw new BusinessException(ResultCode.SHARE_PASSWORD_ERROR);
+            }
+        }
+
+        // 验证文件是否在分享范围内
+        if (!isFileInShareScope(share, fileId)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "文件不在分享范围内");
+        }
+
+        FileInfo file = fileService.getById(fileId);
+        if (file == null) {
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND);
+        }
+
+        String fileUrl;
+        if (kkFileViewConfig.getCallbackUrl() != null && !kkFileViewConfig.getCallbackUrl().isBlank()) {
+            // kkFileView 在 Docker 内，通过分享 stream 接口代理文件
+            String encodedName = java.net.URLEncoder.encode(file.getFileName(), java.nio.charset.StandardCharsets.UTF_8);
+            String encodedPwd = password != null ?
+                    "&password=" + java.net.URLEncoder.encode(password, java.nio.charset.StandardCharsets.UTF_8) : "";
+            fileUrl = kkFileViewConfig.getCallbackUrl() + "/s/" + shareCode + "/stream/" + fileId
+                    + "?" + encodedPwd + "&fullfilename=" + encodedName;
+        } else {
+            String presignedUrl = minioUtils.getPreviewUrl(file.getStoragePath(), file.getFileName(), 7200);
+            fileUrl = presignedUrl;
+        }
+        return kkFileViewConfig.getPreviewUrl(fileUrl);
+    }
+
+    @Override
+    public void streamFile(String shareCode, String password, Long fileId,
+            String rangeHeader, HttpServletResponse response) {
+        Share share = baseMapper.selectByShareCode(shareCode);
+        if (share == null) {
+            throw new BusinessException(ResultCode.SHARE_NOT_FOUND);
+        }
+
+        checkShareValid(share);
+
+        // 验证密码
+        if (share.getPassword() != null && !share.getPassword().isEmpty()) {
+            if (password == null || !share.getPassword().equals(password)) {
+                throw new BusinessException(ResultCode.SHARE_PASSWORD_ERROR);
+            }
+        }
+
+        // 验证文件是否在分享范围内
+        if (!isFileInShareScope(share, fileId)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "文件不在分享范围内");
+        }
+
+        FileInfo fileInfo = fileService.getById(fileId);
+        if (fileInfo == null) {
+            throw new BusinessException(ResultCode.FILE_NOT_FOUND);
+        }
+
+        long fileSize = fileInfo.getFileSize();
+        long start = 0;
+        long end = fileSize - 1;
+
+        try {
+            // 解析 Range 请求头
+            if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                String[] ranges = rangeHeader.substring(6).split("-");
+                start = Long.parseLong(ranges[0]);
+                if (ranges.length > 1 && !ranges[1].isEmpty()) {
+                    end = Long.parseLong(ranges[1]);
+                }
+                end = Math.min(end, fileSize - 1);
+            }
+
+            long contentLength = end - start + 1;
+
+            // 设置响应状态和头
+            response.setStatus(rangeHeader != null ?
+                    HttpServletResponse.SC_PARTIAL_CONTENT : HttpServletResponse.SC_OK);
+
+            String mimeType = fileInfo.getMimeType();
+            if (mimeType == null || mimeType.isBlank()
+                    || mimeType.equals(MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
+                mimeType = inferMimeType(fileInfo.getFileExt());
+            }
+            response.setContentType(mimeType);
+            response.setHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                    "Content-Range, Accept-Ranges, Content-Length, Content-Type");
+            response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
+            response.setHeader(HttpHeaders.CONTENT_RANGE,
+                    String.format("bytes %d-%d/%d", start, end, fileSize));
+            response.setContentLengthLong(contentLength);
+
+            try (InputStream inputStream = minioUtils.downloadFileRange(
+                    fileInfo.getStoragePath(), start, contentLength);
+                    OutputStream outputStream = response.getOutputStream()) {
+
+                byte[] buffer = new byte[8192];
+                long bytesRemaining = contentLength;
+                int bytesRead;
+
+                while (bytesRemaining > 0 &&
+                        (bytesRead = inputStream.read(buffer, 0,
+                                (int) Math.min(buffer.length, bytesRemaining))) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                    bytesRemaining -= bytesRead;
+                }
+                outputStream.flush();
+            }
+        } catch (Exception e) {
+            String message = e.getMessage();
+            if (message != null &&
+                    (message.contains("Connection reset by peer") ||
+                            message.contains("Broken pipe") ||
+                            message.contains("ClientAbortException"))) {
+                log.debug("分享流式传输客户端中止: shareCode={}, fileId={}", shareCode, fileId);
+            } else {
+                log.error("分享流式传输失败: shareCode={}, fileId={}", shareCode, fileId, e);
+            }
+        }
+    }
+
+    /**
+     * 根据文件扩展名推断 MIME 类型
+     */
+    private String inferMimeType(String fileExt) {
+        if (fileExt == null || fileExt.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+        String ext = fileExt.toLowerCase();
+        return switch (ext) {
+            case "mp4" -> "video/mp4";
+            case "webm" -> "video/webm";
+            case "ogg" -> "video/ogg";
+            case "mov" -> "video/quicktime";
+            case "avi" -> "video/x-msvideo";
+            case "mkv" -> "video/x-matroska";
+            case "mp3" -> "audio/mpeg";
+            case "wav" -> "audio/wav";
+            case "aac" -> "audio/aac";
+            case "flac" -> "audio/flac";
+            case "m4a" -> "audio/mp4";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            case "svg" -> "image/svg+xml";
+            case "bmp" -> "image/bmp";
+            case "pdf" -> "application/pdf";
+            case "txt" -> "text/plain";
+            case "html", "htm" -> "text/html";
+            case "css" -> "text/css";
+            case "js" -> "application/javascript";
+            case "json" -> "application/json";
+            default -> MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        };
     }
 
     @Override

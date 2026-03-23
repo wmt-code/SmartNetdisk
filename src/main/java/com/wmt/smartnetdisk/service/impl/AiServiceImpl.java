@@ -44,8 +44,16 @@ public class AiServiceImpl implements IAiService {
     private final IFileService fileService;
     private final MinioUtils minioUtils;
     private final VectorDocumentMapper vectorDocumentMapper;
+    private final com.wmt.smartnetdisk.service.INotificationService notificationService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplate();
+
+    private static RestTemplate createRestTemplate() {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(java.time.Duration.ofSeconds(30));
+        factory.setReadTimeout(java.time.Duration.ofSeconds(120));
+        return new RestTemplate(factory);
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -66,30 +74,40 @@ public class AiServiceImpl implements IAiService {
         if (content == null || content.isBlank()) {
             throw new BusinessException(ResultCode.AI_VECTORIZE_FAIL, "文件内容为空");
         }
+        // 清除 PostgreSQL 不支持的 NULL 字节
+        content = content.replace("\u0000", "");
 
         // 分块处理
         List<String> chunks = splitIntoChunks(content);
-        log.info("文件分块完成: fileId={}, chunks={}", fileId, chunks.size());
+        log.info("文件分块完成: fileId={}, chunks={}, 内容长度={}", fileId, chunks.size(), content.length());
 
-        // 批量向量化并保存
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunk = chunks.get(i);
-            float[] embedding = getEmbedding(chunk);
+        // 批量向量化并保存（每批最多 16 个 chunk）
+        int batchSize = 16;
+        for (int batchStart = 0; batchStart < chunks.size(); batchStart += batchSize) {
+            int batchEnd = Math.min(batchStart + batchSize, chunks.size());
+            List<String> batch = chunks.subList(batchStart, batchEnd);
 
-            VectorDocument doc = new VectorDocument();
-            doc.setFileId(fileId);
-            doc.setUserId(userId);
-            doc.setContent(chunk);
-            doc.setChunkIndex(i);
-            doc.setTokenCount(chunk.length()); // 简化处理
-            doc.setEmbeddingStr(VectorDocument.vectorToString(embedding));
+            // 批量获取 embedding
+            List<float[]> embeddings = getBatchEmbeddings(batch);
 
-            vectorDocumentMapper.insertVectorDocument(doc);
+            for (int j = 0; j < batch.size(); j++) {
+                VectorDocument doc = new VectorDocument();
+                doc.setFileId(fileId);
+                doc.setUserId(userId);
+                doc.setContent(batch.get(j));
+                doc.setChunkIndex(batchStart + j);
+                doc.setTokenCount(batch.get(j).length());
+                doc.setEmbeddingStr(VectorDocument.vectorToString(embeddings.get(j)));
+                vectorDocumentMapper.insertVectorDocument(doc);
+            }
+            log.info("向量化进度: fileId={}, {}/{}", fileId, batchEnd, chunks.size());
         }
 
         // 更新文件向量化状态
         fileInfo.setIsVectorized(1);
         fileService.updateById(fileInfo);
+
+        notificationService.createNotification(userId, "ai", "智能分析完成", "文件已完成向量化分析", fileId);
 
         log.info("文档向量化完成: fileId={}, chunks={}", fileId, chunks.size());
     }
@@ -208,38 +226,154 @@ public class AiServiceImpl implements IAiService {
             content = content.substring(0, 5000);
         }
 
-        String prompt = "请为以下文档生成一个简洁的摘要（200字以内）：\n\n" + content;
-        return callLLM("你是一个专业的文档摘要助手。", prompt, null);
+        String prompt = "请用一两句话概括以下文档的核心内容，不超过80个字，不要使用换行符：\n\n" + content;
+        String summary = callLLM("你是一个专业的文档摘要助手，只输出摘要内容，不要任何前缀和解释。", prompt, null);
+        // 清理并截断
+        summary = summary.replace("\n", " ").replace("\r", "").trim();
+        if (summary.length() > 100) {
+            summary = summary.substring(0, 100) + "...";
+        }
+
+        // 保存摘要到数据库
+        fileInfo.setAiSummary(summary);
+        fileService.updateById(fileInfo);
+
+        return summary;
     }
 
     // ==================== 私有方法 ====================
 
     /**
-     * 获取文本的向量嵌入
+     * 批量获取向量嵌入
      */
-    private float[] getEmbedding(String text) {
+    private List<float[]> getBatchEmbeddings(List<String> texts) {
+        String embeddingModel = aiConfig.getEmbeddingModel();
+        String baseUrl = aiConfig.getEffectiveEmbeddingBaseUrl();
+        boolean isDashScopeNative = baseUrl.contains("dashscope.aliyuncs.com/api/v1");
+        boolean isVolcanoVision = embeddingModel != null
+                && embeddingModel.contains("doubao") && embeddingModel.contains("vision");
+
+        // DashScope 原生 API 和火山引擎 vision 不支持批量，逐个调用
+        if (isDashScopeNative || isVolcanoVision) {
+            List<float[]> results = new ArrayList<>();
+            for (String text : texts) {
+                results.add(getEmbedding(text));
+            }
+            return results;
+        }
+
+        // 标准模型：一次 API 调用处理多个文本
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(aiConfig.getApiKey());
+            headers.setBearerAuth(aiConfig.getEffectiveEmbeddingApiKey());
 
             Map<String, Object> body = new HashMap<>();
-            body.put("model", aiConfig.getEmbeddingModel());
-            body.put("input", text);
+            body.put("model", embeddingModel);
+            body.put("input", texts);
+            body.put("encoding_format", "float");
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            String url = aiConfig.getBaseUrl() + "/embeddings";
+            String url = aiConfig.getEffectiveEmbeddingBaseUrl() + "/embeddings";
 
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-
             JsonNode jsonNode = objectMapper.readTree(response.getBody());
-            JsonNode embeddingNode = jsonNode.get("data").get(0).get("embedding");
+            JsonNode dataNode = jsonNode.get("data");
 
-            float[] embedding = new float[embeddingNode.size()];
-            for (int i = 0; i < embeddingNode.size(); i++) {
+            List<float[]> results = new ArrayList<>();
+            int dim = aiConfig.getEmbeddingDimension();
+            for (int i = 0; i < dataNode.size(); i++) {
+                JsonNode embNode = dataNode.get(i).get("embedding");
+                int actualDim = Math.min(embNode.size(), dim);
+                float[] emb = new float[actualDim];
+                for (int j = 0; j < actualDim; j++) {
+                    emb[j] = (float) embNode.get(j).asDouble();
+                }
+                results.add(emb);
+            }
+            return results;
+        } catch (Exception e) {
+            log.error("批量获取向量嵌入失败", e);
+            throw new BusinessException(ResultCode.AI_SERVICE_ERROR, "向量化服务异常");
+        }
+    }
+
+    /**
+     * 获取文本的向量嵌入（自动适配多种 API 格式）
+     */
+    private float[] getEmbedding(String text) {
+        try {
+            String embeddingModel = aiConfig.getEmbeddingModel();
+            String baseUrl = aiConfig.getEffectiveEmbeddingBaseUrl();
+            boolean isDashScopeNative = baseUrl.contains("dashscope.aliyuncs.com/api/v1");
+            boolean isVolcanoVision = embeddingModel != null
+                    && embeddingModel.contains("doubao") && embeddingModel.contains("vision");
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(aiConfig.getEffectiveEmbeddingApiKey());
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("model", embeddingModel);
+            String url;
+
+            if (isDashScopeNative) {
+                // DashScope 原生 multimodal embedding API
+                // POST https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding
+                body.put("input", Map.of("contents", java.util.List.of(Map.of("text", text))));
+                body.put("parameters", Map.of("dimension", aiConfig.getEmbeddingDimension()));
+                url = baseUrl;
+            } else if (isVolcanoVision) {
+                // 火山引擎 doubao-embedding-vision
+                body.put("input", java.util.List.of(Map.of("type", "text", "text", text)));
+                url = baseUrl + "/embeddings/multimodal";
+            } else {
+                // 标准 OpenAI 兼容格式
+                body.put("input", java.util.List.of(text));
+                url = baseUrl + "/embeddings";
+            }
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+            JsonNode jsonNode = objectMapper.readTree(response.getBody());
+
+            // 解析 embedding 向量（兼容多种响应格式）
+            JsonNode embeddingNode = null;
+
+            // DashScope 原生格式: output.embeddings[0].embedding
+            JsonNode outputNode = jsonNode.get("output");
+            if (outputNode != null) {
+                JsonNode embeddingsArr = outputNode.get("embeddings");
+                if (embeddingsArr != null && embeddingsArr.isArray() && !embeddingsArr.isEmpty()) {
+                    embeddingNode = embeddingsArr.get(0).get("embedding");
+                }
+            }
+
+            // OpenAI 兼容格式: data[0].embedding 或 data.embedding
+            if (embeddingNode == null) {
+                JsonNode dataNode = jsonNode.get("data");
+                if (dataNode != null) {
+                    if (dataNode.isArray() && !dataNode.isEmpty()) {
+                        embeddingNode = dataNode.get(0).get("embedding");
+                    } else if (dataNode.isObject()) {
+                        embeddingNode = dataNode.get("embedding");
+                    }
+                }
+            }
+
+            if (embeddingNode == null || !embeddingNode.isArray()) {
+                log.error("Embedding 响应无法解析向量: {}", response.getBody());
+                throw new BusinessException(ResultCode.AI_SERVICE_ERROR, "向量化响应格式异常");
+            }
+
+            int dim = Math.min(embeddingNode.size(), aiConfig.getEmbeddingDimension());
+            float[] embedding = new float[dim];
+            for (int i = 0; i < dim; i++) {
                 embedding[i] = (float) embeddingNode.get(i).asDouble();
             }
             return embedding;
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("获取向量嵌入失败", e);
             throw new BusinessException(ResultCode.AI_SERVICE_ERROR, "向量化服务异常");
@@ -251,6 +385,17 @@ public class AiServiceImpl implements IAiService {
      */
     private String callLLM(String systemPrompt, String userMessage, List<ChatDTO.ChatMessage> history) {
         try {
+            // 清理输入中的特殊字符
+            userMessage = userMessage.replace("\u0000", "").replace("\r", "");
+            if (systemPrompt != null) {
+                systemPrompt = systemPrompt.replace("\u0000", "");
+            }
+            // 限制总输入长度（避免超出模型 token 限制）
+            if (userMessage.length() > 4000) {
+                userMessage = userMessage.substring(0, 4000) + "\n...(内容已截断)";
+            }
+            log.info("调用 LLM: model={}, userMessageLen={}", aiConfig.getModel(), userMessage.length());
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(aiConfig.getApiKey());
@@ -260,7 +405,8 @@ public class AiServiceImpl implements IAiService {
 
             if (history != null) {
                 for (ChatDTO.ChatMessage msg : history) {
-                    messages.add(Map.of("role", msg.getRole(), "content", msg.getContent()));
+                    String content = msg.getContent().replace("\u0000", "");
+                    messages.add(Map.of("role", msg.getRole(), "content", content));
                 }
             }
             messages.add(Map.of("role", "user", "content", userMessage));
@@ -269,7 +415,7 @@ public class AiServiceImpl implements IAiService {
             body.put("model", aiConfig.getModel());
             body.put("messages", messages);
             body.put("temperature", 0.7);
-            body.put("max_tokens", 2048);
+            body.put("max_tokens", 2000);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             String url = aiConfig.getBaseUrl() + "/chat/completions";
@@ -285,18 +431,62 @@ public class AiServiceImpl implements IAiService {
     }
 
     /**
-     * 读取文件内容（仅支持文本类文件）
+     * 读取文件内容（根据文件类型选择提取方式）
      */
     private String readFileContent(FileInfo fileInfo) {
-        try {
-            InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath());
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                return reader.lines().collect(Collectors.joining("\n"));
-            }
+        String ext = fileInfo.getFileExt() != null ? fileInfo.getFileExt().toLowerCase() : "";
+        try (InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath())) {
+            return switch (ext) {
+                case "pdf" -> extractPdfText(inputStream);
+                case "docx" -> extractDocxText(inputStream);
+                case "doc" -> extractDocText(inputStream);
+                default -> extractPlainText(inputStream);
+            };
         } catch (Exception e) {
-            log.error("读取文件内容失败: {}", fileInfo.getStoragePath(), e);
-            throw new BusinessException(ResultCode.AI_VECTORIZE_FAIL, "读取文件失败");
+            log.error("读取文件内容失败: ext={}, path={}", ext, fileInfo.getStoragePath(), e);
+            throw new BusinessException(ResultCode.AI_VECTORIZE_FAIL, "读取文件失败: " + e.getMessage());
+        }
+    }
+
+    /** 提取 PDF 文本 */
+    private String extractPdfText(InputStream inputStream) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument doc = org.apache.pdfbox.Loader.loadPDF(inputStream.readAllBytes())) {
+            org.apache.pdfbox.text.PDFTextStripper stripper = new org.apache.pdfbox.text.PDFTextStripper();
+            return stripper.getText(doc);
+        }
+    }
+
+    /** 提取 docx 文本 */
+    private String extractDocxText(InputStream inputStream) throws Exception {
+        try (org.apache.poi.xwpf.usermodel.XWPFDocument doc = new org.apache.poi.xwpf.usermodel.XWPFDocument(inputStream)) {
+            StringBuilder sb = new StringBuilder();
+            for (org.apache.poi.xwpf.usermodel.XWPFParagraph para : doc.getParagraphs()) {
+                sb.append(para.getText()).append("\n");
+            }
+            // 也提取表格内容
+            for (org.apache.poi.xwpf.usermodel.XWPFTable table : doc.getTables()) {
+                for (org.apache.poi.xwpf.usermodel.XWPFTableRow row : table.getRows()) {
+                    for (org.apache.poi.xwpf.usermodel.XWPFTableCell cell : row.getTableCells()) {
+                        sb.append(cell.getText()).append("\t");
+                    }
+                    sb.append("\n");
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    /** 提取 doc (Word 97-2003) 文本 */
+    private String extractDocText(InputStream inputStream) throws Exception {
+        try (org.apache.poi.hwpf.HWPFDocument doc = new org.apache.poi.hwpf.HWPFDocument(inputStream)) {
+            return doc.getDocumentText();
+        }
+    }
+
+    /** 提取纯文本 (txt, md, json, xml 等) */
+    private String extractPlainText(InputStream inputStream) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.joining("\n"));
         }
     }
 

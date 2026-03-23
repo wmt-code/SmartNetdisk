@@ -29,6 +29,11 @@ public interface IFileService extends IService<FileInfo> {
     PageResult<FileVO> listFiles(Long userId, FileListDTO listDTO);
 
     /**
+     * 获取最近访问的文件列表
+     */
+    PageResult<FileVO> listRecentFiles(Long userId, FileListDTO listDTO);
+
+    /**
      * 根据 MD5 检查文件是否存在（秒传检测）
      *
      * @param fileMd5 文件MD5

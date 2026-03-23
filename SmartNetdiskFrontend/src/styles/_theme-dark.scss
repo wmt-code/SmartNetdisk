@@ -1,66 +1,83 @@
-// Dark Theme Variables
+// Dark Theme Variables - v2.0
 [data-theme="dark"] {
-  // Background colors
-  --color-background: #0F0F1A;
-  --color-background-secondary: #1A1A2E;
-  --color-surface: #1E1E32;
-  --color-surface-secondary: #252542;
+  // Background colors - deep, rich darks
+  --color-background: #0C0C14;
+  --color-background-secondary: #13131F;
+  --color-surface: #1A1A2B;
+  --color-surface-secondary: #22223A;
+  --color-surface-elevated: #252540;
 
   // Text colors
-  --color-text: #F3F4F6;
-  --color-text-secondary: #D1D5DB;
-  --color-text-muted: #9CA3AF;
-  --color-text-inverse: #1F2937;
+  --color-text: #F1F5F9;
+  --color-text-secondary: #CBD5E1;
+  --color-text-muted: #64748B;
+  --color-text-inverse: #0F172A;
 
   // Border colors
-  --color-border: #374151;
-  --color-border-light: #4B5563;
+  --color-border: #2D2D48;
+  --color-border-light: #1F1F35;
   --color-border-focus: var(--color-primary-light);
 
   // Glassmorphism
-  --glass-bg: rgba(30, 30, 50, 0.8);
-  --glass-bg-hover: rgba(40, 40, 65, 0.9);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(26, 26, 43, 0.85);
+  --glass-bg-hover: rgba(34, 34, 58, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.06);
   --glass-blur: 16px;
 
   // Card backgrounds
-  --card-bg: rgba(30, 30, 50, 0.6);
-  --card-bg-hover: rgba(40, 40, 65, 0.8);
-  --card-border: rgba(255, 255, 255, 0.08);
+  --card-bg: #1A1A2B;
+  --card-bg-hover: #22223A;
+  --card-border: #2D2D48;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4);
 
   // Sidebar
-  --sidebar-bg: rgba(30, 30, 50, 0.85);
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-item-hover: rgba(167, 139, 250, 0.15);
-  --sidebar-item-active: rgba(167, 139, 250, 0.25);
+  --sidebar-bg: #13131F;
+  --sidebar-border: #1F1F35;
+  --sidebar-item-hover: rgba(167, 139, 250, 0.1);
+  --sidebar-item-active: rgba(167, 139, 250, 0.15);
+  --sidebar-item-active-text: var(--color-primary-light);
 
   // Input/Form
-  --input-bg: rgba(30, 30, 50, 0.6);
-  --input-border: #374151;
+  --input-bg: #22223A;
+  --input-border: #2D2D48;
   --input-border-focus: var(--color-primary-light);
+  --input-shadow-focus: 0 0 0 3px rgba(167, 139, 250, 0.15);
 
   // Overlay
-  --overlay-bg: rgba(0, 0, 0, 0.7);
-  --modal-bg: #1E1E32;
+  --overlay-bg: rgba(0, 0, 0, 0.6);
+  --modal-bg: #1A1A2B;
 
   // Scrollbar
-  --scrollbar-track: #1A1A2E;
-  --scrollbar-thumb: #4B5563;
-  --scrollbar-thumb-hover: #6B7280;
+  --scrollbar-track: #13131F;
+  --scrollbar-thumb: #3D3D5C;
+  --scrollbar-thumb-hover: #4D4D6A;
 
   // AI Message colors
-  --ai-message-bg: linear-gradient(135deg, #2D2D4A 0%, #3D3D5C 100%);
+  --ai-message-bg: linear-gradient(135deg, #1F1F35 0%, #2D2D48 100%);
   --user-message-bg: linear-gradient(135deg, #6D28D9 0%, #5B21B6 100%);
 
-  // Adjusted primary for dark mode
+  // File card specific
+  --file-card-bg: #1A1A2B;
+  --file-card-hover-bg: #22223A;
+  --file-card-selected-bg: rgba(167, 139, 250, 0.08);
+  --file-card-selected-border: var(--color-primary-light);
+
+  // Toolbar
+  --toolbar-bg: transparent;
+  --toolbar-border: #1F1F35;
+
+  // Adjusted primary for dark mode readability
   --color-primary: #A78BFA;
   --color-primary-light: #C4B5FD;
   --color-primary-dark: #7C3AED;
 
-  // Shadows - darker for dark mode
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-  --shadow-primary: 0 10px 40px rgba(167, 139, 250, 0.25);
+  // Shadows
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.35), 0 2px 4px -2px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  --shadow-primary: 0 8px 30px rgba(167, 139, 250, 0.2);
+  --shadow-primary-sm: 0 4px 14px rgba(167, 139, 250, 0.15);
 }

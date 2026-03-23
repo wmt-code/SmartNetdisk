@@ -25,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -41,6 +43,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> implements IFileService {
 
+    /** 自动向量化的最大文件大小：50KB */
+    private static final long AUTO_VECTORIZE_MAX_SIZE = 50 * 1024;
+
     private final IUserService userService;
     private final MinioUtils minioUtils;
     private final com.wmt.smartnetdisk.config.KkFileViewConfig kkFileViewConfig;
@@ -52,6 +57,10 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     @org.springframework.context.annotation.Lazy
     @org.springframework.beans.factory.annotation.Autowired
     private IFolderService folderService;
+
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.wmt.smartnetdisk.service.INotificationService notificationService;
 
     @Override
     public PageResult<FileVO> listFiles(Long userId, FileListDTO listDTO) {
@@ -102,9 +111,14 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
             wrapper.eq(FileInfo::getFileType, listDTO.getFileType());
         }
 
-        // 关键词搜索
+        // 关键词搜索（同时匹配文件名和AI摘要）
         if (listDTO.getKeyword() != null && !listDTO.getKeyword().isBlank()) {
-            wrapper.like(FileInfo::getFileName, listDTO.getKeyword());
+            String keyword = listDTO.getKeyword();
+            wrapper.and(w -> w
+                .like(FileInfo::getFileName, keyword)
+                .or()
+                .like(FileInfo::getAiSummary, keyword)
+            );
         }
 
         // 排序
@@ -143,6 +157,7 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         // 处理时间类型（SQL返回Timestamp需要转换）
         vo.setCreateTime(convertToLocalDateTime(row.get("create_time")));
         vo.setUpdateTime(convertToLocalDateTime(row.get("update_time")));
+        vo.setAiSummary((String) row.get("ai_summary"));
         return vo;
     }
 
@@ -178,6 +193,44 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         vo.setCreateTime(folder.getCreateTime());
         vo.setUpdateTime(folder.getCreateTime()); // FolderVO 没有 updateTime，使用 createTime
         return vo;
+    }
+
+    @Override
+    public PageResult<FileVO> listRecentFiles(Long userId, FileListDTO listDTO) {
+        LambdaQueryWrapper<FileInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FileInfo::getUserId, userId)
+               .eq(FileInfo::getDeleted, 0)
+               .isNotNull(FileInfo::getLastAccessTime)
+               .ne(FileInfo::getFileType, "folder");  // 不显示文件夹
+
+        // 文件类型过滤
+        if (listDTO.getFileType() != null && !listDTO.getFileType().isBlank()) {
+            wrapper.eq(FileInfo::getFileType, listDTO.getFileType());
+        }
+
+        // 关键词搜索（同时匹配文件名和AI摘要）
+        if (listDTO.getKeyword() != null && !listDTO.getKeyword().isBlank()) {
+            String keyword = listDTO.getKeyword();
+            wrapper.and(w -> w
+                .like(FileInfo::getFileName, keyword)
+                .or()
+                .like(FileInfo::getAiSummary, keyword)
+            );
+        }
+
+        // 按最近访问时间倒序
+        wrapper.orderByDesc(FileInfo::getLastAccessTime);
+
+        int pageNum = listDTO.getPageNum() != null ? listDTO.getPageNum() : 1;
+        int pageSize = listDTO.getPageSize() != null ? listDTO.getPageSize() : 20;
+        Page<FileInfo> page = new Page<>(pageNum, pageSize);
+        Page<FileInfo> result = this.page(page, wrapper);
+
+        List<FileVO> voList = result.getRecords().stream()
+                .map(this::toVO)
+                .toList();
+
+        return PageResult.of(result.getCurrent(), result.getSize(), result.getTotal(), voList);
     }
 
     @Override
@@ -277,8 +330,15 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         userService.updateUsedSpace(userId, sourceFile.getFileSize());
 
         // 如果文件类型支持向量化，异步触发向量化
-        if (aiService.isFileVectorizable(newFile.getFileExt())) {
-            aiService.vectorizeDocumentAsync(userId, newFile.getId());
+        if (aiService.isFileVectorizable(newFile.getFileExt()) && newFile.getFileSize() <= AUTO_VECTORIZE_MAX_SIZE) {
+            final Long uid = userId;
+            final Long fid = newFile.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    aiService.vectorizeDocumentAsync(uid, fid);
+                }
+            });
         }
 
         log.info("文件复制成功: userId={}, sourceFileId={}, newFileId={}, targetFolderId={}",
@@ -467,6 +527,7 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         vo.setFolderId(fileInfo.getFolderId());
         vo.setCreateTime(fileInfo.getCreateTime());
         vo.setUpdateTime(fileInfo.getUpdateTime());
+        vo.setAiSummary(fileInfo.getAiSummary());
         return vo;
     }
 
@@ -513,10 +574,19 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         if (dotIndex >= 0) {
             fileExt = fastUploadDTO.getFileName().substring(dotIndex + 1);
         }
-        if (aiService.isFileVectorizable(fileExt)) {
-            aiService.vectorizeDocumentAsync(userId, newFile.getId());
+        if (aiService.isFileVectorizable(fileExt) && newFile.getFileSize() <= AUTO_VECTORIZE_MAX_SIZE) {
+            final Long uid = userId;
+            final Long fid = newFile.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    aiService.vectorizeDocumentAsync(uid, fid);
+                }
+            });
             log.info("已触发异步向量化(秒传): fileId={}, fileExt={}", newFile.getId(), fileExt);
         }
+
+        notificationService.createNotification(userId, "upload", "文件上传成功", "文件 " + fastUploadDTO.getFileName() + " 已上传", newFile.getId());
 
         return UploadResultVO.fastUpload(newFile.getId(), newFile.getFileName());
     }
@@ -566,11 +636,20 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
         log.info("文件上传成功: userId={}, fileName={}, size={}, 总耗时={}ms", userId, originalFilename, file.getSize(),
                 endTime - startTime);
 
-        // 如果文件类型支持向量化，异步触发向量化
-        if (aiService.isFileVectorizable(fileExt)) {
-            aiService.vectorizeDocumentAsync(userId, newFile.getId());
+        // 小文件自动向量化（≤50KB），大文件需用户手动触发
+        if (aiService.isFileVectorizable(fileExt) && newFile.getFileSize() <= AUTO_VECTORIZE_MAX_SIZE) {
+            final Long uid = userId;
+            final Long fid = newFile.getId();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    aiService.vectorizeDocumentAsync(uid, fid);
+                }
+            });
             log.info("已触发异步向量化: fileId={}, fileExt={}", newFile.getId(), fileExt);
         }
+
+        notificationService.createNotification(userId, "upload", "文件上传成功", "文件 " + originalFilename + " 已上传", newFile.getId());
 
         return UploadResultVO.normalUpload(newFile.getId(), originalFilename, file.getSize(), fileMd5);
     }
@@ -590,11 +669,20 @@ public class FileServiceImpl extends ServiceImpl<FileInfoMapper, FileInfo> imple
     @Override
     public String getKkFileViewPreviewUrl(Long userId, Long fileId, int expiry) {
         FileInfo fileInfo = getFileWithPermission(userId, fileId);
-        // 使用简单的预签名 URL（不带 response-content-type 等额外参数）
-        // 避免 kkFileView 解析带分号的 URL 时出现 400 错误
-        String minioUrl = minioUtils.getPresignedUrl(fileInfo.getStoragePath(), expiry);
-        // 通过 kkFileView 生成预览页面 URL
-        return kkFileViewConfig.getPreviewUrl(minioUrl);
+
+        String fileUrl;
+        if (kkFileViewConfig.getCallbackUrl() != null && !kkFileViewConfig.getCallbackUrl().isBlank()) {
+            // kkFileView 在 Docker 内，通过后端 stream 接口代理文件
+            String token = cn.dev33.satoken.stp.StpUtil.getTokenValue();
+            String encodedName = java.net.URLEncoder.encode(fileInfo.getFileName(), java.nio.charset.StandardCharsets.UTF_8);
+            fileUrl = kkFileViewConfig.getCallbackUrl() + "/file/" + fileId + "/stream?satoken=" + token
+                    + "&fullfilename=" + encodedName;
+        } else {
+            // kkFileView 可直接访问 MinIO，使用 presigned URL
+            fileUrl = minioUtils.getPresignedUrl(fileInfo.getStoragePath(), expiry);
+        }
+
+        return kkFileViewConfig.getPreviewUrl(fileUrl);
     }
 
     @Override

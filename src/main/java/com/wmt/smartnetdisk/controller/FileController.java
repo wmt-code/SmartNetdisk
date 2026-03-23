@@ -138,6 +138,10 @@ public class FileController {
         Long userId = authService.getCurrentUserId();
         FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
 
+        // 更新最近访问时间
+        fileInfo.setLastAccessTime(java.time.LocalDateTime.now());
+        fileService.updateById(fileInfo);
+
         try (InputStream inputStream = minioUtils.downloadFile(fileInfo.getStoragePath());
                 OutputStream outputStream = response.getOutputStream()) {
 
@@ -177,6 +181,10 @@ public class FileController {
 
         Long userId = authService.getCurrentUserId();
         FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+
+        // 更新最近访问时间
+        fileInfo.setLastAccessTime(java.time.LocalDateTime.now());
+        fileService.updateById(fileInfo);
 
         long fileSize = fileInfo.getFileSize();
         long start = 0;
@@ -263,6 +271,12 @@ public class FileController {
     @GetMapping("/{id}/preview")
     public Result<Map<String, String>> getPreviewUrl(@PathVariable("id") Long fileId) {
         Long userId = authService.getCurrentUserId();
+
+        // 更新最近访问时间
+        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+        fileInfo.setLastAccessTime(java.time.LocalDateTime.now());
+        fileService.updateById(fileInfo);
+
         // 所有文件都使用 kkFileView 预览（2小时有效期）
         String url = fileService.getKkFileViewPreviewUrl(userId, fileId, 7200);
         Map<String, String> data = new HashMap<>();
@@ -286,6 +300,12 @@ public class FileController {
             @RequestParam(value = "offset", required = false) Long offset,
             @RequestParam(value = "limit", required = false) Long limit) {
         Long userId = authService.getCurrentUserId();
+
+        // 更新最近访问时间
+        FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+        fileInfo.setLastAccessTime(java.time.LocalDateTime.now());
+        fileService.updateById(fileInfo);
+
         Map<String, Object> data = fileService.getFileContent(userId, fileId, offset, limit);
         return Result.success(data);
     }
@@ -310,6 +330,16 @@ public class FileController {
     public Result<PageResult<FileVO>> listFiles(FileListDTO listDTO) {
         Long userId = authService.getCurrentUserId();
         PageResult<FileVO> result = fileService.listFiles(userId, listDTO);
+        return Result.success(result);
+    }
+
+    /**
+     * 获取最近访问的文件
+     */
+    @GetMapping("/recent")
+    public Result<PageResult<FileVO>> listRecentFiles(FileListDTO listDTO) {
+        Long userId = authService.getCurrentUserId();
+        PageResult<FileVO> result = fileService.listRecentFiles(userId, listDTO);
         return Result.success(result);
     }
 
@@ -401,6 +431,41 @@ public class FileController {
         Long userId = authService.getCurrentUserId();
         fileService.clearRecycleBin(userId);
         return Result.success("回收站已清空", null);
+    }
+
+    /**
+     * 批量下载为 ZIP
+     */
+    @PostMapping("/batch/download")
+    public void batchDownload(@RequestBody List<Long> fileIds, HttpServletResponse response) {
+        Long userId = authService.getCurrentUserId();
+
+        response.setContentType("application/zip");
+        response.setHeader("Content-Disposition", "attachment; filename=\"download.zip\"");
+
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(response.getOutputStream())) {
+            for (Long fileId : fileIds) {
+                try {
+                    FileInfo fileInfo = fileService.getFileWithPermission(userId, fileId);
+                    if (fileInfo.getFileType().equals("folder")) continue; // Skip folders
+
+                    zos.putNextEntry(new java.util.zip.ZipEntry(fileInfo.getFileName()));
+                    try (InputStream is = minioUtils.downloadFile(fileInfo.getStoragePath())) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = is.read(buffer)) > 0) {
+                            zos.write(buffer, 0, len);
+                        }
+                    }
+                    zos.closeEntry();
+                } catch (Exception e) {
+                    log.warn("批量下载跳过文件 fileId={}: {}", fileId, e.getMessage());
+                }
+            }
+            zos.flush();
+        } catch (Exception e) {
+            log.error("批量下载失败", e);
+        }
     }
 
     /**

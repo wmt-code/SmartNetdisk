@@ -35,7 +35,6 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
     private com.wmt.smartnetdisk.service.IFileService fileService;
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public Long createFolderPath(Long userId, com.wmt.smartnetdisk.dto.request.CreateFolderPathDTO createPathDTO) {
         String path = createPathDTO.getPath();
         Long parentId = createPathDTO.getParentId();
@@ -54,34 +53,7 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
             if (folderName.isEmpty())
                 continue;
 
-            // 检查文件夹是否存在
-            LambdaQueryWrapper<Folder> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(Folder::getUserId, userId)
-                    .eq(Folder::getParentId, currentParentId)
-                    .eq(Folder::getFolderName, folderName)
-                    .eq(Folder::getDeleted, 0);
-
-            Folder folder = getOne(wrapper);
-
-            if (folder == null) {
-                // 不存在则创建
-                folder = new Folder();
-                folder.setUserId(userId);
-                folder.setParentId(currentParentId);
-                folder.setFolderName(folderName);
-
-                try {
-                    save(folder);
-                } catch (Exception e) {
-                    // 并发情况下可能已存在，尝试再次查询
-                    folder = getOne(wrapper);
-                    if (folder == null) {
-                        throw new BusinessException(ResultCode.BAD_REQUEST, "创建文件夹失败");
-                    }
-                }
-            }
-
-            currentParentId = folder.getId();
+            currentParentId = getOrCreateFolder(userId, currentParentId, folderName);
         }
 
         return currentParentId;
@@ -115,6 +87,41 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
         save(folder);
         log.info("文件夹创建成功: userId={}, folderName={}", userId, createDTO.getFolderName());
         return toVO(folder);
+    }
+
+    /**
+     * 获取或创建文件夹（并发安全，依赖数据库唯一约束）
+     */
+    private synchronized Long getOrCreateFolder(Long userId, Long parentId, String folderName) {
+        // 先查询
+        LambdaQueryWrapper<Folder> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Folder::getUserId, userId)
+                .eq(Folder::getParentId, parentId)
+                .eq(Folder::getFolderName, folderName)
+                .eq(Folder::getDeleted, 0);
+
+        Folder folder = getOne(wrapper);
+        if (folder != null) {
+            return folder.getId();
+        }
+
+        // 不存在则创建
+        folder = new Folder();
+        folder.setUserId(userId);
+        folder.setParentId(parentId);
+        folder.setFolderName(folderName);
+
+        try {
+            save(folder);
+            return folder.getId();
+        } catch (Exception e) {
+            // 唯一约束冲突，说明并发创建了，再查一次
+            folder = getOne(wrapper);
+            if (folder != null) {
+                return folder.getId();
+            }
+            throw new BusinessException(ResultCode.BAD_REQUEST, "创建文件夹失败");
+        }
     }
 
     @Override
@@ -171,7 +178,8 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
             throw new BusinessException(ResultCode.DATA_UPDATE_FAIL, "文件夹删除失败");
         }
         log.info("文件夹移入回收站成功: folderId={}, folderName={}", folderId, folder.getFolderName());
-        // TODO: 递归删除子文件夹和文件
+        // 递归软删除子文件夹和文件
+        recursiveSoftDelete(userId, folderId);
     }
 
     @Override
@@ -184,6 +192,8 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
         folder.setDeleted(0);
         folder.setDeleteTime(null);
         updateById(folder);
+        // 递归恢复子文件夹和文件
+        recursiveRestore(userId, folderId);
         log.info("文件夹恢复成功: folderId={}, folderName={}", folderId, folder.getFolderName());
     }
 
@@ -213,6 +223,70 @@ public class FolderServiceImpl extends ServiceImpl<FolderMapper, Folder> impleme
             recursivePermanentDelete(userId, folder.getId());
         }
         log.info("回收站文件夹清空成功: userId={}, count={}", userId, recycledFolders.size());
+    }
+
+    /**
+     * 递归软删除文件夹下的所有子文件和子文件夹
+     */
+    private void recursiveSoftDelete(Long userId, Long folderId) {
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        // 1. 软删除当前文件夹下的所有文件
+        List<com.wmt.smartnetdisk.entity.FileInfo> files = fileService.list(
+                new LambdaQueryWrapper<com.wmt.smartnetdisk.entity.FileInfo>()
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getUserId, userId)
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getFolderId, folderId)
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getDeleted, 0));
+
+        for (com.wmt.smartnetdisk.entity.FileInfo file : files) {
+            file.setDeleted(1);
+            file.setDeleteTime(now);
+            fileService.updateById(file);
+        }
+
+        // 2. 软删除子文件夹，并递归处理
+        List<Folder> children = list(new LambdaQueryWrapper<Folder>()
+                .eq(Folder::getUserId, userId)
+                .eq(Folder::getParentId, folderId)
+                .eq(Folder::getDeleted, 0));
+
+        for (Folder child : children) {
+            child.setDeleted(1);
+            child.setDeleteTime(now);
+            updateById(child);
+            recursiveSoftDelete(userId, child.getId());
+        }
+    }
+
+    /**
+     * 递归恢复文件夹下的所有子文件和子文件夹
+     */
+    private void recursiveRestore(Long userId, Long folderId) {
+        // 1. 恢复当前文件夹下的所有已删除文件
+        List<com.wmt.smartnetdisk.entity.FileInfo> files = fileService.list(
+                new LambdaQueryWrapper<com.wmt.smartnetdisk.entity.FileInfo>()
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getUserId, userId)
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getFolderId, folderId)
+                        .eq(com.wmt.smartnetdisk.entity.FileInfo::getDeleted, 1));
+
+        for (com.wmt.smartnetdisk.entity.FileInfo file : files) {
+            file.setDeleted(0);
+            file.setDeleteTime(null);
+            fileService.updateById(file);
+        }
+
+        // 2. 恢复子文件夹，并递归处理
+        List<Folder> children = list(new LambdaQueryWrapper<Folder>()
+                .eq(Folder::getUserId, userId)
+                .eq(Folder::getParentId, folderId)
+                .eq(Folder::getDeleted, 1));
+
+        for (Folder child : children) {
+            child.setDeleted(0);
+            child.setDeleteTime(null);
+            updateById(child);
+            recursiveRestore(userId, child.getId());
+        }
     }
 
     /**

@@ -135,6 +135,16 @@ public class ShareVO implements Serializable {
     private LocalDateTime createTime;
 
     /**
+     * 分享者用户名
+     */
+    private String sharerUsername;
+
+    /**
+     * 分享者头像
+     */
+    private String sharerAvatar;
+
+    /**
      * 分享项列表（批量分享时使用）
      */
     private List<ShareItemVO> items;

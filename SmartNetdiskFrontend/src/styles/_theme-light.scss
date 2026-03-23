@@ -1,55 +1,70 @@
-// Light Theme Variables
+// Light Theme Variables - v2.0
 :root,
 [data-theme="light"] {
-  // Background colors
-  --color-background: #FAF5FF;
-  --color-background-secondary: #F3E8FF;
+  // Background colors - warm neutral instead of purple tint
+  --color-background: #F8FAFC;
+  --color-background-secondary: #F1F5F9;
   --color-surface: #FFFFFF;
-  --color-surface-secondary: #FAFAFA;
+  --color-surface-secondary: #F8FAFC;
+  --color-surface-elevated: #FFFFFF;
 
-  // Text colors
-  --color-text: #1F2937;
-  --color-text-secondary: #4B5563;
-  --color-text-muted: #9CA3AF;
+  // Text colors - better contrast
+  --color-text: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
   --color-text-inverse: #FFFFFF;
 
   // Border colors
-  --color-border: #E5E7EB;
-  --color-border-light: #F3F4F6;
+  --color-border: #E2E8F0;
+  --color-border-light: #F1F5F9;
   --color-border-focus: var(--color-primary);
 
-  // Glassmorphism
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-bg-hover: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.5);
+  // Glassmorphism - subtler
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-bg-hover: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(226, 232, 240, 0.6);
   --glass-blur: 12px;
 
   // Card backgrounds
-  --card-bg: rgba(255, 255, 255, 0.6);
-  --card-bg-hover: rgba(255, 255, 255, 0.8);
-  --card-border: rgba(255, 255, 255, 0.3);
+  --card-bg: #FFFFFF;
+  --card-bg-hover: #FAFBFD;
+  --card-border: #E2E8F0;
+  --card-shadow: var(--shadow-sm);
+  --card-shadow-hover: var(--shadow-lg);
 
-  // Sidebar
-  --sidebar-bg: rgba(255, 255, 255, 0.7);
-  --sidebar-border: rgba(255, 255, 255, 0.5);
-  --sidebar-item-hover: rgba(124, 58, 237, 0.08);
-  --sidebar-item-active: rgba(124, 58, 237, 0.12);
+  // Sidebar - clean with subtle distinction
+  --sidebar-bg: #FFFFFF;
+  --sidebar-border: #F1F5F9;
+  --sidebar-item-hover: rgba(124, 58, 237, 0.06);
+  --sidebar-item-active: rgba(124, 58, 237, 0.1);
+  --sidebar-item-active-text: var(--color-primary);
 
   // Input/Form
-  --input-bg: rgba(255, 255, 255, 0.8);
-  --input-border: #E5E7EB;
+  --input-bg: #FFFFFF;
+  --input-border: #E2E8F0;
   --input-border-focus: var(--color-primary);
+  --input-shadow-focus: 0 0 0 3px rgba(124, 58, 237, 0.1);
 
   // Overlay
-  --overlay-bg: rgba(0, 0, 0, 0.5);
+  --overlay-bg: rgba(15, 23, 42, 0.4);
   --modal-bg: #FFFFFF;
 
   // Scrollbar
-  --scrollbar-track: #F3F4F6;
-  --scrollbar-thumb: #D1D5DB;
-  --scrollbar-thumb-hover: #9CA3AF;
+  --scrollbar-track: #F1F5F9;
+  --scrollbar-thumb: #CBD5E1;
+  --scrollbar-thumb-hover: #94A3B8;
 
   // AI Message colors
-  --ai-message-bg: linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 100%);
+  --ai-message-bg: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
   --user-message-bg: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+
+  // File card specific
+  --file-card-bg: #FFFFFF;
+  --file-card-hover-bg: #FAFBFD;
+  --file-card-selected-bg: rgba(124, 58, 237, 0.05);
+  --file-card-selected-border: var(--color-primary);
+
+  // Toolbar
+  --toolbar-bg: transparent;
+  --toolbar-border: #F1F5F9;
 }

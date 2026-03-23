@@ -44,7 +44,7 @@ public class UserController {
      *
      * @return 用户信息
      */
-    @GetMapping("/info")
+    @GetMapping({"/info", "/profile"})
     public Result<UserVO> getUserInfo() {
         return Result.success(authService.getCurrentUser());
     }
@@ -55,7 +55,7 @@ public class UserController {
      * @param updateDTO 更新请求
      * @return 更新后的用户信息
      */
-    @PutMapping("/info")
+    @PutMapping({"/info", "/profile"})
     public Result<UserVO> updateUserInfo(@Valid @RequestBody UpdateUserDTO updateDTO) {
         Long userId = authService.getCurrentUserId();
         User user = userService.getById(userId);

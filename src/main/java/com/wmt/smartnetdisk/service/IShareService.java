@@ -128,6 +128,28 @@ public interface IShareService extends IService<Share> {
             jakarta.servlet.http.HttpServletResponse response);
 
     /**
+     * 获取分享文件预览链接（kkFileView）
+     *
+     * @param shareCode 分享码
+     * @param password  提取码（如果有的话）
+     * @param fileId    文件ID
+     * @return kkFileView 预览 URL
+     */
+    String getFilePreviewUrl(String shareCode, String password, Long fileId);
+
+    /**
+     * 流式传输分享文件（支持 Range 请求，用于视频/音频/图片预览）
+     *
+     * @param shareCode   分享码
+     * @param password    提取码
+     * @param fileId      文件ID
+     * @param rangeHeader Range 请求头
+     * @param response    HTTP响应对象
+     */
+    void streamFile(String shareCode, String password, Long fileId,
+            String rangeHeader, jakarta.servlet.http.HttpServletResponse response);
+
+    /**
      * 将分享实体转换为视图对象
      *
      * @param share           分享实体

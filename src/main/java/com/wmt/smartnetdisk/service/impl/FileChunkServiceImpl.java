@@ -12,6 +12,7 @@ import com.wmt.smartnetdisk.dto.request.FastUploadDTO;
 import com.wmt.smartnetdisk.entity.FileChunk;
 import com.wmt.smartnetdisk.entity.FileInfo;
 import com.wmt.smartnetdisk.mapper.FileChunkMapper;
+import com.wmt.smartnetdisk.service.IAiService;
 import com.wmt.smartnetdisk.service.IFileChunkService;
 import com.wmt.smartnetdisk.service.IFileService;
 import com.wmt.smartnetdisk.service.IUserService;
@@ -49,6 +50,10 @@ public class FileChunkServiceImpl extends ServiceImpl<FileChunkMapper, FileChunk
     private final IUserService userService;
     @Lazy
     private final IFileService fileService;
+    private final com.wmt.smartnetdisk.service.INotificationService notificationService;
+    @Lazy
+    @org.springframework.beans.factory.annotation.Autowired
+    private IAiService aiService;
 
     @Override
     public ChunkCheckResultVO checkChunks(Long userId, FastUploadDTO fastUploadDTO) {
@@ -193,7 +198,27 @@ public class FileChunkServiceImpl extends ServiceImpl<FileChunkMapper, FileChunk
 
         log.info("分片上传完成: userId={}, fileName={}, size={}", userId, mergeDTO.getFileName(), mergeDTO.getTotalSize());
 
-        // 7. 返回结果
+        notificationService.createNotification(userId, "upload", "文件上传成功", "文件 " + mergeDTO.getFileName() + " 已上传", fileInfo.getId());
+
+        // 7. 小文件自动向量化（≤50KB），事务提交后触发
+        try {
+            if (aiService.isFileVectorizable(fileInfo.getFileExt()) && fileInfo.getFileSize() <= 50 * 1024) {
+                final Long uid = userId;
+                final Long fid = fileInfo.getId();
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            aiService.vectorizeDocumentAsync(uid, fid);
+                        }
+                    });
+                log.info("已注册事务提交后向量化: fileId={}, ext={}, size={}", fileInfo.getId(), fileInfo.getFileExt(), fileInfo.getFileSize());
+            }
+        } catch (Exception e) {
+            log.warn("自动向量化触发失败（不影响上传）: {}", e.getMessage());
+        }
+
+        // 8. 返回结果
         UploadResultVO result = new UploadResultVO();
         result.setFileId(fileInfo.getId());
         result.setFileName(fileInfo.getFileName());

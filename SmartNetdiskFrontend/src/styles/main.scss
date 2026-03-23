@@ -1,9 +1,9 @@
 // Import design system modules
 @use "./element/index.scss" as *;
-@import "./variables";
-@import "./theme-light";
-@import "./theme-dark";
-@import "./animations";
+@use "./variables";
+@use "./theme-light";
+@use "./theme-dark";
+@use "./animations";
 
 * {
     box-sizing: border-box;

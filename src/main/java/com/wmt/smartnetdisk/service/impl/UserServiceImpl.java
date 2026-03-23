@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wmt.smartnetdisk.entity.User;
 import com.wmt.smartnetdisk.mapper.UserMapper;
 import com.wmt.smartnetdisk.service.IUserService;
+import com.wmt.smartnetdisk.utils.MinioUtils;
 import com.wmt.smartnetdisk.vo.UserVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
+
+    private final MinioUtils minioUtils;
 
     @Override
     public User getByUsername(String username) {
@@ -54,7 +57,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         vo.setUsername(user.getUsername());
         // 邮箱脱敏：保留前3位和@后面的部分
         vo.setEmail(maskEmail(user.getEmail()));
-        vo.setAvatar(user.getAvatar());
+        // 头像：将 MinIO 路径转为 presigned URL
+        if (user.getAvatar() != null && !user.getAvatar().isBlank()) {
+            try {
+                vo.setAvatar(minioUtils.getAvatarPresignedUrl(user.getAvatar(), 7 * 24 * 3600));
+            } catch (Exception e) {
+                vo.setAvatar(null);
+            }
+        }
+        vo.setRole(user.getRole());
+        vo.setStatus(user.getStatus());
         vo.setUsedSpace(user.getUsedSpace());
         vo.setTotalSpace(user.getTotalSpace());
         // 计算使用百分比

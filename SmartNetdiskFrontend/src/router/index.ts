@@ -15,58 +15,76 @@ const router = createRouter({
           path: 'files/:path*',
           name: 'Files',
           component: () => import('@/views/file/FileMain.vue'),
-          meta: { title: '全部文件' }
+          meta: { title: '全部文件' },
         },
         {
           path: 'recent',
           name: 'Recent',
           component: () => import('@/views/file/FileMain.vue'),
-          meta: { title: '最近访问' }
+          meta: { title: '最近访问', isRecent: true },
         },
         {
           path: 'photos',
           name: 'Photos',
           component: () => import('@/views/file/FileMain.vue'),
-          meta: { title: '相册', fileType: 'image' }
+          meta: { title: '相册', fileType: 'image' },
         },
         {
           path: 'shares',
           name: 'MyShares',
           component: () => import('@/views/MySharesView.vue'),
-          meta: { title: '我的分享' }
+          meta: { title: '我的分享' },
         },
         {
           path: 'recycle',
           name: 'Recycle',
           component: () => import('@/views/file/FileMain.vue'),
-          meta: { title: '回收站', isRecycle: true }
-        }
-      ]
+          meta: { title: '回收站', isRecycle: true },
+        },
+        {
+          path: 'profile',
+          name: 'Profile',
+          component: () => import('@/views/ProfileView.vue'),
+          meta: { title: '个人中心' },
+        },
+        {
+          path: 'settings',
+          name: 'Settings',
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { title: '系统设置' },
+        },
+        {
+          path: 'admin',
+          name: 'Admin',
+          component: () => import('@/views/admin/AdminDashboard.vue'),
+          meta: { title: '管理后台', requiresAdmin: true },
+        },
+      ],
     },
     {
       path: '/login',
       name: 'Login',
       component: () => import('@/views/LoginView.vue'),
-      meta: { title: '登录', guest: true }
+      meta: { title: '登录', guest: true },
     },
     {
       path: '/register',
       name: 'Register',
       component: () => import('@/views/RegisterView.vue'),
-      meta: { title: '注册', guest: true }
+      meta: { title: '注册', guest: true },
     },
     {
       path: '/s/:code',
       name: 'ShareAccess',
       component: () => import('@/views/ShareView.vue'),
-      meta: { title: '文件分享', public: true }
+      meta: { title: '文件分享', public: true },
     },
     {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
-      redirect: '/'
-    }
-  ]
+      redirect: '/',
+    },
+  ],
 })
 
 // 路由守卫
@@ -94,6 +112,17 @@ router.beforeEach((to, _from, next) => {
     } else {
       next()
     }
+    return
+  }
+
+  // 管理员页面
+  if (to.meta?.requiresAdmin) {
+    if (!isLoggedIn) {
+      next('/login')
+      return
+    }
+    // Role check will be done by backend API returning 403
+    next()
     return
   }
 

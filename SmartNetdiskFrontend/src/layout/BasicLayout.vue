@@ -63,6 +63,11 @@
               </el-icon>
               <template #title><span>回收站</span></template>
             </el-menu-item>
+            <!-- Admin entry (only for admin users) -->
+            <el-menu-item v-if="userStore.userInfo?.role === 'admin'" index="/admin" class="menu-item">
+              <el-icon><Setting /></el-icon>
+              <template #title><span>管理后台</span></template>
+            </el-menu-item>
           </el-menu>
 
           <!-- Storage info -->
@@ -124,12 +129,8 @@
           <!-- Right actions -->
           <div class="header-actions">
             <ThemeToggle />
-            <el-button circle class="action-btn">
-              <el-icon>
-                <Bell />
-              </el-icon>
-            </el-button>
-            <el-button circle class="action-btn">
+            <NotificationDropdown />
+            <el-button circle class="action-btn" @click="router.push('/settings')">
               <el-icon>
                 <Setting />
               </el-icon>
@@ -154,6 +155,12 @@
                       <Setting />
                     </el-icon>
                     系统设置
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="userStore.userInfo?.role === 'admin'" command="admin">
+                    <el-icon>
+                      <Monitor />
+                    </el-icon>
+                    后台管理
                   </el-dropdown-item>
                   <el-dropdown-item divided command="logout">
                     <el-icon>
@@ -191,11 +198,11 @@
 
 <script setup lang="ts">
 import AiSidebar from '@/components/AiSidebar.vue'
+import NotificationDropdown from '@/components/NotificationDropdown.vue'
 import { ThemeToggle } from '@/components/ui'
 import { useSidebar, useTheme } from '@/composables'
 import { useUserStore } from '@/stores/user'
 import {
-  Bell,
   Clock,
   Cloudy,
   Coin,
@@ -209,7 +216,8 @@ import {
   Setting,
   Share,
   SwitchButton,
-  User
+  User,
+  Monitor
 } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -236,6 +244,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/photos')) return '/photos'
   if (path.startsWith('/shares')) return '/shares'
   if (path.startsWith('/recycle')) return '/recycle'
+  if (path.startsWith('/admin')) return '/admin'
   return '/files'
 })
 
@@ -272,8 +281,13 @@ function toggleAiSidebar() {
 async function handleUserCommand(command: string) {
   switch (command) {
     case 'profile':
+      router.push('/profile')
       break
     case 'settings':
+      router.push('/settings')
+      break
+    case 'admin':
+      router.push('/admin')
       break
     case 'logout':
       try {

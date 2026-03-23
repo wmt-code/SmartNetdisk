@@ -32,14 +32,16 @@ public interface FileInfoMapper extends BaseMapper<FileInfo> {
             (
                 SELECT id, folder_name AS file_name, 0 AS file_size, 'folder' AS file_type,
                        '' AS file_ext, NULL AS thumbnail_path, 0 AS is_vectorized,
-                       parent_id AS folder_id, create_time, create_time AS update_time, 0 AS sort_order
+                       parent_id AS folder_id, create_time, create_time AS update_time,
+                       NULL AS ai_summary, 0 AS sort_order
                 FROM folder
                 WHERE user_id = #{userId} AND parent_id = #{folderId} AND deleted = 0
             )
             UNION ALL
             (
                 SELECT id, file_name, file_size, file_type, file_ext, thumbnail_path,
-                       is_vectorized, folder_id, create_time, update_time, 1 AS sort_order
+                       is_vectorized, folder_id, create_time, update_time,
+                       ai_summary, 1 AS sort_order
                 FROM file_info
                 WHERE user_id = #{userId} AND folder_id = #{folderId} AND deleted = 0
             )

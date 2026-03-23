@@ -1,5 +1,6 @@
 package com.wmt.smartnetdisk.common.exception;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import com.wmt.smartnetdisk.common.result.Result;
 import com.wmt.smartnetdisk.common.result.ResultCode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -105,6 +106,16 @@ public class GlobalExceptionHandler {
     public Result<Void> handleNoResourceFoundException(NoResourceFoundException e) {
         log.warn("资源不存在: {}", e.getResourcePath());
         return Result.fail(ResultCode.NOT_FOUND);
+    }
+
+    /**
+     * 处理 Sa-Token 未登录异常
+     */
+    @ExceptionHandler(NotLoginException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> handleNotLoginException(NotLoginException e, HttpServletRequest request) {
+        log.warn("未登录访问 - URI: {}, Type: {}", request.getRequestURI(), e.getType());
+        return Result.fail(ResultCode.UNAUTHORIZED);
     }
 
     /**

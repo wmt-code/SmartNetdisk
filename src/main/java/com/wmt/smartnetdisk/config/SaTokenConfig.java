@@ -26,6 +26,9 @@ public class SaTokenConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // 注册 Sa-Token 拦截器，打开注解式鉴权功能
         registry.addInterceptor(new SaInterceptor(handle -> {
+            // 管理员接口：需要 admin 角色
+            SaRouter.match("/admin/**").check(r -> StpUtil.checkRole("admin"));
+
             // 路由拦截规则
             SaRouter
                     // 拦截所有路由
