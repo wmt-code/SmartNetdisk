@@ -6,9 +6,16 @@ pipeline {
         PROJECT_NAME = 'smartnetdisk'
         IMAGE_NAME = 'smartnetdisk'
         IMAGE_TAG = "${BUILD_NUMBER}"
-        
+
         // 部署配置
         DEPLOY_PATH = '/opt/smartnetdisk'
+
+        // 敏感信息从 Jenkins 凭据管理中读取
+        DB_PASSWORD      = credentials('db-password')
+        REDIS_PASSWORD   = credentials('redis-password')
+        MINIO_ACCESS_KEY = credentials('minio-access-key')
+        MINIO_SECRET_KEY = credentials('minio-secret-key')
+        AI_API_KEY       = credentials('ai-api-key')
     }
 
     options {
@@ -71,14 +78,14 @@ pipeline {
                             -p 8081:8081 \
                             -e DB_HOST=172.18.0.9 \
                             -e DB_USERNAME=postgres \
-                            -e DB_PASSWORD=Pgsql@2314 \
+                            -e DB_PASSWORD=${DB_PASSWORD} \
                             -e REDIS_HOST=172.18.0.2 \
-                            -e REDIS_PASSWORD=redis_rbKhnX \
+                            -e REDIS_PASSWORD=${REDIS_PASSWORD} \
                             -e MINIO_ENDPOINT=http://172.18.0.6:9000 \
-                            -e MINIO_ACCESS_KEY=minio_nCHiZS \
-                            -e MINIO_SECRET_KEY=minio_ZPZEzf \
+                            -e MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY} \
+                            -e MINIO_SECRET_KEY=${MINIO_SECRET_KEY} \
                             -e KKFILEVIEW_BASE_URL=https://kkfile.abcsummer.site \
-                            -e SILICONFLOW_API_KEY=sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm \
+                            -e AI_API_KEY=${AI_API_KEY} \
                             smartnetdisk:latest
                     fi
                 '''

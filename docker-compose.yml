@@ -13,20 +13,20 @@ services:
       - "8081:8081"    # 后端 API 端口
     environment:
       # 数据库配置（使用容器 IP）
-      - DB_HOST=172.17.0.2
+      - DB_HOST=${DB_HOST:-172.17.0.2}
       - DB_USERNAME=postgres
-      - DB_PASSWORD=Pgsql@2314
+      - DB_PASSWORD=${DB_PASSWORD}
       # Redis 配置
-      - REDIS_HOST=172.18.0.2
-      - REDIS_PASSWORD=redis_rbKhnX
+      - REDIS_HOST=${REDIS_HOST:-172.18.0.2}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       # MinIO 配置
-      - MINIO_ENDPOINT=http://172.18.0.6:9000
-      - MINIO_ACCESS_KEY=minio_nCHiZS
-      - MINIO_SECRET_KEY=minio_ZPZEzf
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://172.18.0.6:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       # kkFileView 配置（域名，返回给浏览器访问）
       - KKFILEVIEW_BASE_URL=https://kkfile.abcsummer.site
       # AI 配置
-      - SILICONFLOW_API_KEY=sk-giqgiwxanysmmapjiasizmopsfvcplxmaybtpaddrvnnltlm
+      - AI_API_KEY=${AI_API_KEY}
       # JVM 配置
       - JAVA_OPTS=-Xms512m -Xmx1024m
     networks:
