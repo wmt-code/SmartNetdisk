@@ -316,6 +316,63 @@ ON CONFLICT DO NOTHING;
 -- ===========================================
 
 -- ===========================================
+-- 7. AI 聊天会话表 (chat_session)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS chat_session (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(200),
+    mode VARCHAR(20),
+    messages TEXT,
+    scoped_file_ids TEXT,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_session_user_id ON chat_session(user_id);
+
+COMMENT ON TABLE chat_session IS 'AI聊天会话表';
+COMMENT ON COLUMN chat_session.user_id IS '所属用户ID';
+COMMENT ON COLUMN chat_session.title IS '会话标题';
+COMMENT ON COLUMN chat_session.mode IS '会话模式';
+COMMENT ON COLUMN chat_session.messages IS '消息记录(JSON)';
+COMMENT ON COLUMN chat_session.scoped_file_ids IS '关联文件ID列表';
+
+-- ===========================================
+-- 8. 通知表 (notification)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS notification (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(50),
+    title VARCHAR(200),
+    content TEXT,
+    is_read SMALLINT NOT NULL DEFAULT 0,
+    related_id BIGINT,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_user_id ON notification(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_user_read ON notification(user_id, is_read);
+
+COMMENT ON TABLE notification IS '通知表';
+COMMENT ON COLUMN notification.user_id IS '所属用户ID';
+COMMENT ON COLUMN notification.type IS '通知类型';
+COMMENT ON COLUMN notification.title IS '通知标题';
+COMMENT ON COLUMN notification.content IS '通知内容';
+COMMENT ON COLUMN notification.is_read IS '是否已读: 0-未读, 1-已读';
+COMMENT ON COLUMN notification.related_id IS '关联对象ID';
+
+-- ===========================================
+-- 9. 补充字段
+-- ===========================================
+ALTER TABLE file_info ADD COLUMN IF NOT EXISTS ai_summary TEXT;
+COMMENT ON COLUMN file_info.ai_summary IS 'AI生成的文件摘要';
+
+ALTER TABLE sys_user ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
+COMMENT ON COLUMN sys_user.role IS '角色: admin/user';
+
+-- ===========================================
 -- 数据库优化脚本 - 文件查询性能优化
 -- 创建日期: 2026-01-23
 -- ===========================================
