@@ -42,6 +42,14 @@ LABEL description="SmartNetdisk Backend Application"
 
 WORKDIR /app
 
+# 设置时区为东八区
+RUN apk add --no-cache tzdata && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    apk del tzdata
+
+ENV TZ=Asia/Shanghai
+
 # 安装 Nginx 用于托管前端
 RUN apk add --no-cache nginx
 

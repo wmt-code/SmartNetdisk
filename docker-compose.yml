@@ -27,6 +27,8 @@ services:
       - KKFILEVIEW_BASE_URL=https://kkfile.abcsummer.site
       # AI 配置
       - AI_API_KEY=${AI_API_KEY}
+      # 时区
+      - TZ=Asia/Shanghai
       # JVM 配置
       - JAVA_OPTS=-Xms512m -Xmx1024m
     networks:

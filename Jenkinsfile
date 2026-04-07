@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -86,6 +87,7 @@ pipeline {
                             -e MINIO_SECRET_KEY=${MINIO_SECRET_KEY} \
                             -e KKFILEVIEW_BASE_URL=https://kkfile.abcsummer.site \
                             -e AI_API_KEY=${AI_API_KEY} \
+                            -e TZ=Asia/Shanghai \
                             smartnetdisk:latest
                     fi
                 '''
