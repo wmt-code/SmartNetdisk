@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS vector_document (
     user_id BIGINT NOT NULL,
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
-    embedding vector(1024),  -- 向量维度根据 BAAI/bge-large-zh-v1.5 模型调整
+    embedding vector(1024),  -- 向量维度根据 text-embedding-v3 模型调整
     token_count INT,
     create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

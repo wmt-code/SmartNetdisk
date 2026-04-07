@@ -23,12 +23,12 @@ public class AiConfig {
     /**
      * API 基础 URL
      */
-    private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    private String baseUrl = "https://aihubmix.com/v1";
 
     /**
      * 对话模型
      */
-    private String model = "tongyi-xiaomi-analysis-pro";
+    private String model = "DeepSeek-V3";
 
     /**
      * Embedding API Key（可选，为空则使用 apiKey）
@@ -43,7 +43,7 @@ public class AiConfig {
     /**
      * 向量化模型
      */
-    private String embeddingModel = "text-embedding-v3";
+    private String embeddingModel = "BAAI/bge-large-zh-v1.5";
 
     /**
      * 向量维度

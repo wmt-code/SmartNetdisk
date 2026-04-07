@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Claude Code / OMC ###
+.omc/
+.agent/skills/*/scripts/__pycache__/
+
+### Misc ###
+nul
+pic/

@@ -53,15 +53,13 @@ minio:
   secret-key: ${MINIO_SECRET_KEY:}
   bucket-name: smartnetdisk
 
-# AI 配置（全部使用阿里云 DashScope）
+# AI 配置（使用 AiHubMix 推理时代）
 ai:
   siliconflow:
     api-key: ${AI_API_KEY:}
-    base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
-    model: ${AI_MODEL:qwen3.5-plus-2026-02-15}
-    # Embedding 使用 DashScope 原生 API（qwen3-vl-embedding 不支持 OpenAI 兼容模式）
-    embedding-base-url: ${EMBEDDING_BASE_URL:https://dashscope.aliyuncs.com/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding}
-    embedding-model: ${EMBEDDING_MODEL:qwen3-vl-embedding}
+    base-url: ${AI_BASE_URL:https://aihubmix.com/v1}
+    model: ${AI_MODEL:DeepSeek-V3}
+    embedding-model: ${EMBEDDING_MODEL:BAAI/bge-large-zh-v1.5}
     embedding-dimension: 1024
 
 # kkFileView 配置
