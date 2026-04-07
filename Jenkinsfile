@@ -145,24 +145,16 @@ pipeline {
 
     post {
         success {
-            echo '''
-            ✅ ==========================================
-            ✅ 部署成功!
-            ✅ 前端地址: http://your-server:9080
-            ✅ 后端地址: http://your-server:8081
-            ✅ ==========================================
-            '''
+            echo '✅ 部署成功! 前端: http://your-server:9080 | 后端: http://your-server:8081'
         }
         failure {
             echo '❌ 构建或部署失败!'
-            sh '''
-                echo "查看容器日志..."
-                docker logs smartnetdisk-app || true
-            '''
         }
         always {
-            echo '🧹 清理工作空间...'
-            cleanWs()
+            node {
+                echo '🧹 清理工作空间...'
+                cleanWs()
+            }
         }
     }
 }
