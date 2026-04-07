@@ -369,6 +369,9 @@ COMMENT ON COLUMN notification.related_id IS '关联对象ID';
 ALTER TABLE file_info ADD COLUMN IF NOT EXISTS ai_summary TEXT;
 COMMENT ON COLUMN file_info.ai_summary IS 'AI生成的文件摘要';
 
+ALTER TABLE file_info ADD COLUMN IF NOT EXISTS last_access_time TIMESTAMP;
+COMMENT ON COLUMN file_info.last_access_time IS '最近访问时间';
+
 ALTER TABLE sys_user ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
 COMMENT ON COLUMN sys_user.role IS '角色: admin/user';
 
