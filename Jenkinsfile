@@ -151,7 +151,7 @@ pipeline {
             echo '❌ 构建或部署失败!'
         }
         always {
-            node {
+            node('') {
                 echo '🧹 清理工作空间...'
                 cleanWs()
             }
