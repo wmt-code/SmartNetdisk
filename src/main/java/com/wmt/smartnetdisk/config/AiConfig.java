@@ -67,12 +67,12 @@ public class AiConfig {
     /**
      * 文档分块大小（字符数）
      */
-    private int chunkSize = 2000;
+    private int chunkSize = 450;
 
     /**
      * 分块重叠大小
      */
-    private int chunkOverlap = 200;
+    private int chunkOverlap = 50;
 
     /**
      * 支持向量化的文件扩展名
